@@ -114,12 +114,16 @@ class TriageConfig(BaseModel):
 
     score_weights: dict[str, float] = Field(
         default={
-            "rule_compliance": 1.0,
             "alert_penalty": 1.0,
             "property_centrality": 0.5,
             "complexity_penalty": 0.25,
         },
-        description="Weights for the composite score. See chem/score.py.",
+        description="Weights for the composite score. See chem/score.py. "
+        "rule_compliance is deliberately absent: the score aggregates "
+        "geometrically, so a component of zero is close to a veto, and "
+        "rule_compliance is zero whenever every requested rule set fails. "
+        "Rule results are still computed and reported on every molecule - "
+        "they just do not move the ranking unless you weight them.",
     )
 
     @model_validator(mode="after")
