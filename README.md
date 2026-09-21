@@ -31,12 +31,12 @@ that specifies exactly what it must do.
 ```bash
 make install
 make test-api     # 27 passed   <- the service
-make test-chem    # 122 passed, 21 failed  <- the spec you are implementing
+make test-chem    # 135 passed, 18 failed  <- the spec you are implementing
 ```
 
-`parse.py`, `descriptors.py`, `rules.py`, `alerts.py` and `scaffolds.py` are
-implemented (see [traps](#traps-worth-knowing-about)); the remaining four
-modules are stubs.
+`parse.py`, `descriptors.py`, `rules.py`, `alerts.py`, `scaffolds.py` and
+`fingerprints.py` are implemented (see [traps](#traps-worth-knowing-about));
+the remaining three modules are stubs.
 
 Start the server against the stubs and it behaves correctly: jobs are accepted,
 dispatched, and fail with a message naming the exact stub that stopped them.
@@ -150,7 +150,7 @@ makes the next testable:
 | 3 | ~~`rules.py`~~ **done** | Lipinski, Veber, Egan, Ghose, lead-like, Ro3 | — |
 | 4 | ~~`alerts.py`~~ **done** | PAINS / BRENK / NIH via RDKit `FilterCatalog` | — |
 | 5 | ~~`scaffolds.py`~~ **done** | Bemis–Murcko | — |
-| 6 | `fingerprints.py` | ECFP4 + Tanimoto | ECFP**4** is radius **2**; use `BulkTanimotoSimilarity` |
+| 6 | ~~`fingerprints.py`~~ **done** | ECFP4 + Tanimoto | — |
 | 7 | `cluster.py` | Butina | O(n²) — will not fit at 200k. Cap it, or use `LeaderPicker` |
 | 8 | `score.py` | Composite score + breakdown | Must stay in [0,1] for *any* caller weights |
 | 9 | `pipeline.py` | Composes 1–8 across the two phases | Only picklable args; must never raise |
@@ -223,6 +223,15 @@ so a client highlighting it shows the other as clean. `alerts.py` takes the
 SMARTS off the match and re-runs it for all occurrences, giving
 `[0,1,2,9,10,11]`. Costs ~13%, paid only when an alert actually fires.
 
+Two in `fingerprints.py`, one of them compounding the other. **ECFP4 is radius
+2** — the number in the name is the diameter. And `GetMorganGenerator`'s own
+default radius is **3**, so omitting the parameter silently gives you ECFP6
+rather than the documented ECFP4. Always pass it.
+
+**Bulk similarity is worth 17×** — `BulkTanimotoSimilarity` over 12,000
+fingerprints takes 0.9 ms against 16.4 ms for the Python comprehension. On a
+clustering pass that is the whole job.
+
 One in `scaffolds.py`: **scaffold SMILES are written without stereochemistry.**
 Kept, nicotine's two enantiomers scaffold to `c1cncc([C@@H]2CCCN2)c1` and
 `c1cncc([C@H]2CCCN2)c1` and land in different groups — which defeats the point
@@ -259,6 +268,7 @@ Measured on this machine, per core:
 | alerts, rebuilding catalogs per molecule | ~57 | ~7 min |
 | Murcko scaffolds | ~14800 | ~2 s |
 | generic scaffolds | ~6100 | ~4 s |
+| ECFP4 fingerprints | ~106k | <1 s |
 
 The tautomer pass costs about 3× and buys keto/enol forms of one compound
 deduplicating against each other. It is on by default.
