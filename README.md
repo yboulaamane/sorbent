@@ -353,11 +353,28 @@ third of marketed oral drugs violate Ro5, and they now land at the bottom:
 | erythromycin | 0.0021 | marketed, fails Lipinski and Veber |
 
 which is below water at 0.465. That is the aggregation doing exactly what it
-was told — you said Lipinski compliance weighs as much as everything else — but
-it makes **the choice of `rule_sets` consequential in a way it was not before.**
-Do not request rules your chemotype cannot pass. A macrolide or PROTAC campaign
-should drop Lipinski from `rule_sets`, or weight `rule_compliance` below the
-other components, rather than burying its own series.
+was told, but it makes **the choice of `rule_sets` consequential in a way it
+was not before.** Do not request rules your chemotype cannot pass.
+
+**Removing a rule set does not help a molecule that fails the ones that
+remain.** `rule_compliance` is a fraction, so 0/2 and 0/1 are both 0.0 —
+erythromycin scores 0.0021 under `[lipinski, veber]` and 0.0021 under
+`[veber]`. The two things that actually lift it:
+
+| | erythromycin |
+|---|---|
+| `rule_sets: []` — component is 1.0 | 0.3258 |
+| `rule_compliance` left out of `score_weights` | 0.1717 |
+
+So a macrolide, peptidomimetic or PROTAC campaign should drop the *component*,
+not trim the list of rules feeding it.
+
+Lipinski is **not** in the default `rule_sets` — the default is `[veber]`
+alone. Request Ro5 explicitly when it suits the chemotype. Be aware that a
+single rule set makes `rule_compliance` binary `{0, 1}` with no partial
+credit: a molecule failing by a hair (TPSA 142.7 against Veber's 140) drops
+from 0.387 to 0.003. If borderline molecules matter, request two or three rule
+sets rather than one.
 
 Flooring the components before the log was tried as a fix and does not work.
 Measured across floors of 1e-6, 0.02, 0.05, 0.10 and 0.20, raising the floor

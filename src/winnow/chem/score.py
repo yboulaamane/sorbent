@@ -44,19 +44,34 @@ fourth was outvoted. Geometrically it scores 0.465, benzene 0.596, and the six
 highest-scoring molecules in a mixed test set are all real drugs.
 
 **The cost, which is real: a component of exactly zero is close to a veto.**
-``rule_compliance`` is 0.0 whenever every requested rule set fails, and with
-two rule sets it is quantised to {0, 0.5, 1}, so zero is easy to reach. Roughly
-a third of marketed oral drugs violate Ro5, and they now land at the bottom:
+``rule_compliance`` is 0.0 whenever every requested rule set fails. It is a
+fraction, so its resolution is set by how many rule sets were asked for: two
+give {0, 0.5, 1}, and the default one gives {0, 1} with no middle ground at
+all. A molecule that fails its single requested rule set by a hair - TPSA
+142.7 against Veber's 140 - drops from 0.387 to 0.003 purely for want of a
+second rule set to earn partial credit on. If borderline molecules matter to
+you, request two or three rule sets rather than one.
+
+Roughly a third of marketed oral drugs violate Ro5, and they land at the
+bottom:
 
     atorvastatin   0.0038      marketed, fails Lipinski and Veber
     erythromycin   0.0021      marketed, fails Lipinski and Veber
 
 which is below water at 0.465. That is the aggregation doing exactly what it
-was asked to do - you told it Lipinski compliance weighs as much as everything
-else - but it means **the choice of rule_sets is now consequential in a way it
-was not before.** Do not request rules your chemotype cannot pass. A macrolide
-or a PROTAC campaign should drop Lipinski from rule_sets, or weight
-rule_compliance below the other components, rather than burying its own series.
+was asked to do, but it means **the choice of rule_sets is now consequential
+in a way it was not before.** Do not request rules your chemotype cannot pass.
+
+Note that *removing* a rule set does not help a molecule that fails the ones
+that remain: rule_compliance is a fraction, so 0/2 and 0/1 are both 0.0.
+Erythromycin scores 0.0021 under [lipinski, veber] and 0.0021 under [veber].
+The two things that actually lift it are
+
+    rule_sets = []                      -> rule_compliance is 1.0, score 0.3258
+    rule_compliance left unweighted     -> component dropped,     score 0.1717
+
+so a macrolide, peptidomimetic or PROTAC campaign should drop the component,
+not trim the list of rules feeding it.
 
 Flooring the components before the log was tried as a fix and does not work.
 Measured across floors of 1e-6, 0.02, 0.05, 0.10 and 0.20, raising the floor
