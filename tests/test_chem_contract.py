@@ -84,6 +84,97 @@ def test_process_record_reports_error_not_raises():
     assert result.standard_smiles is None
 
 
+@pytest.mark.parametrize(
+    "smiles",
+    [
+        "C[C@H](N)C(=O)O",  # L-alanine
+        "C[C@H](N)C(=O)N[C@@H](Cc1ccccc1)C(=O)O",  # a dipeptide
+        "CN1CCC[C@H]1c1cccnc1",  # nicotine
+    ],
+)
+def test_standardisation_preserves_defined_stereo(smiles):
+    """Regression: RDKit's TautomerEnumerator strips sp3 stereo by DEFAULT.
+
+    CleanupParameters.tautomerRemoveSp3Stereo is True out of the box, which
+    removes stereo from any centre adjacent to a tautomerisable system - the
+    alpha carbon of every amino acid. Without the flag set False, this test
+    sees L-alanine come back racemic.
+    """
+    from winnow.chem.parse import process_record
+
+    result = process_record(smiles)
+    assert result.error is None
+    assert "@" in result.standard_smiles, f"stereo lost: {smiles} -> {result.standard_smiles}"
+
+
+def test_standardisation_preserves_double_bond_geometry():
+    from winnow.chem.parse import process_record
+
+    assert "/" in process_record("C/C=C/C(=O)O").standard_smiles
+
+
+@pytest.mark.parametrize("placeholder", ["*", "[*]", "[*][*]"])
+def test_dummy_atom_only_records_are_rejected(placeholder):
+    """R-group placeholders parse and sanitise cleanly, then report MW 0.
+
+    Same failure class as MolFromSmiles("") returning an empty Mol: valid to
+    RDKit, not a compound.
+    """
+    from winnow.chem.parse import parse_smiles
+
+    assert parse_smiles(placeholder) is None
+
+
+def test_attachment_points_on_a_real_fragment_are_kept():
+    """A dummy atom alongside real atoms is an ordinary fragment-library
+    attachment point, and must survive."""
+    from winnow.chem.parse import parse_smiles
+
+    assert parse_smiles("*c1ccccc1") is not None
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("CC(=O)CC(=O)C", "CC(O)=CC(=O)C"),  # keto / enol
+        ("Oc1ccccn1", "O=c1cccc[nH]1"),  # 2-pyridone / 2-hydroxypyridine
+    ],
+)
+def test_tautomers_collapse_to_one_key(a, b):
+    """What the expensive tautomer pass buys: these dedupe against each other."""
+    from winnow.chem.parse import process_record
+
+    assert process_record(a).inchikey == process_record(b).inchikey
+
+
+def test_skipping_tautomer_canonicalisation_is_allowed(aspirin):
+    from winnow.chem.parse import parse_smiles, standardize
+
+    assert standardize(parse_smiles(aspirin), canonical_tautomer=False) is not None
+
+
+@pytest.mark.parametrize(
+    "junk",
+    ["", "   ", "\t", "\n", "nan", "None", "N/A", "smiles", '"CCO"', "CCO,extra,cols"],
+)
+def test_spreadsheet_junk_is_rejected_cleanly(junk):
+    """The contents of a real vendor SMILES column."""
+    from winnow.chem.parse import process_record
+
+    result = process_record(junk)
+    assert result.mol is None
+    assert result.error is not None
+
+
+def test_mol_is_none_exactly_when_error_is_set():
+    """The ParsedMolecule contract the pipeline relies on."""
+    from winnow.chem.parse import process_record
+
+    for smiles in ["CCO", "", "C(((", "c1ccccc1", "garbage", "*", "[Na+].[Cl-]"]:
+        result = process_record(smiles)
+        assert (result.mol is None) == (result.error is not None), smiles
+
+
 # --- descriptors ------------------------------------------------------------
 
 
