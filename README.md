@@ -25,8 +25,11 @@ that specifies exactly what it must do.
 ```bash
 make install
 make test-api     # 27 passed   <- the service
-make test-chem    # 46 failed   <- the spec you are implementing
+make test-chem    # 34 passed, 34 failed   <- the spec you are implementing
 ```
+
+`parse.py` is implemented (see [the stereo note](#a-trap-worth-knowing-about));
+the remaining eight modules are stubs.
 
 Start the server against the stubs and it behaves correctly: jobs are accepted,
 dispatched, and fail with a message naming the exact stub that stopped them.
@@ -135,7 +138,7 @@ makes the next testable:
 
 | # | Module | What it does | Watch out for |
 |---|---|---|---|
-| 1 | `parse.py` | SMILES → sanitised, standardised mol + InChIKey | Standardisation **order**; never raise on bad input |
+| 1 | ~~`parse.py`~~ **done** | SMILES → sanitised, standardised mol + InChIKey | — |
 | 2 | `descriptors.py` | MW, clogP, TPSA, HBD/HBA, RotB, Fsp3, stereo | Keys must match the `Descriptors` schema exactly |
 | 3 | `rules.py` | Lipinski, Veber, Egan, Ghose, lead-like, Ro3 | **Lipinski permits one violation** — the most-mis-implemented rule in cheminformatics |
 | 4 | `alerts.py` | PAINS / BRENK / NIH via RDKit `FilterCatalog` | Build each catalog **once**; rebuilding per molecule is ~10× the runtime |
@@ -155,6 +158,39 @@ must be closer to salicylic acid than to caffeine; standardising twice must
 give the same answer as once; the counts must reconcile
 (`parsed + parse_failed == submitted`). Read the test before writing the
 function.
+
+### A trap worth knowing about
+
+RDKit's `TautomerEnumerator` **strips defined sp3 stereochemistry by default**.
+`CleanupParameters.tautomerRemoveSp3Stereo` is `True` out of the box, and it
+removes stereo from any centre adjacent to a tautomerisable system — which is
+the alpha carbon of every amino acid:
+
+```
+C[C@H](N)C(=O)O                          ->  CC(N)C(=O)O
+C[C@H](N)C(=O)N[C@@H](Cc1ccccc1)C(=O)O   ->  CC(N)C(=O)NC(Cc1ccccc1)C(=O)O
+```
+
+RDKit is not exactly wrong — such a centre is epimerisable in principle — but
+silently racemising a peptidomimetic library is data loss, not triage.
+`parse.py` sets the flag `False`; `test_standardisation_preserves_defined_stereo`
+pins it.
+
+Two smaller ones, both pinned by tests: `MolFromSmiles("")` returns an **empty
+`Mol`, not `None`**, and `"*"` / `"[*]"` (R-group placeholders, common in vendor
+SMILES columns) parse and sanitise cleanly, then report MW 0.
+
+### Throughput
+
+Measured on this machine, per core, over a mixed 5k library:
+
+| | mol/s/core | 200k library, 8 cores |
+|---|---|---|
+| with canonical tautomer | ~780 | ~32 s |
+| `canonical_tautomer=False` | ~2400 | ~11 s |
+
+The tautomer pass costs about 3× and buys keto/enol forms of one compound
+deduplicating against each other. It is on by default.
 
 ---
 
