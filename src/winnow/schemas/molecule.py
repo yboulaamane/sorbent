@@ -29,6 +29,10 @@ class Descriptors(BaseModel):
 
     molecular_weight: float
     heavy_atoms: int
+    total_atoms: int = Field(
+        description="Heavy atoms plus hydrogens. Ghose's atom-count criterion "
+        "is defined on this, not on heavy atoms - see chem/rules.py."
+    )
     clogp: float = Field(description="Crippen logP (RDKit MolLogP).")
     tpsa: float = Field(description="Topological polar surface area, Ertl.")
     hbd: int = Field(description="Lipinski H-bond donors.")
