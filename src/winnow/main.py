@@ -33,12 +33,16 @@ DESCRIPTION = """
 Submit a compound library, get back a ranked, deduplicated, liability-flagged
 shortlist.
 
-**Everything Winnow reports is computed, not predicted.** Descriptors come from
-RDKit, rule sets are the published literature definitions, structural alerts are
-RDKit's bundled catalogs, and the composite score is a transparent weighted sum
-whose breakdown ships with every molecule. There is no trained model anywhere in
-this service, and therefore nothing here is an affinity, an activity, or a
-probability of success.
+**Everything Winnow reports is deterministic and citable.** Descriptors come
+from RDKit, rule sets are the published literature definitions, structural
+alerts are RDKit's bundled catalogs, and the composite score is a transparent
+weighted sum whose breakdown ships with every molecule. Nothing here is an
+affinity, an activity, or a probability of success.
+
+One caveat worth stating plainly: `clogp` is a fitted atom-contribution model
+(Wildman & Crippen 1999), so it is an estimate of a physical property and is
+routinely off by half a log unit. Every other descriptor is exact given the
+structure.
 """
 
 

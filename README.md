@@ -3,16 +3,22 @@
 **A compound triage service.** Submit a SMILES library, get back a ranked,
 deduplicated, liability-flagged shortlist.
 
-Everything Winnow reports is **computed, not predicted**. Descriptors come from
-RDKit, the rule sets are the published literature definitions, the structural
-alerts are RDKit's bundled catalogs, and the composite score is a transparent
-weighted sum that ships its own breakdown with every molecule. There is no
-trained model anywhere in this service — so nothing here is an affinity, an
-activity, or a probability of success, and the API says so.
+Everything Winnow reports is **deterministic and citable**. Descriptors come
+from RDKit, the rule sets are the published literature definitions, the
+structural alerts are RDKit's bundled catalogs, and the composite score is a
+transparent weighted sum that ships its own breakdown with every molecule.
+Nothing here is an affinity, an activity, or a probability of success.
 
 That constraint is the point. A triage tool is useful in proportion to how much
 you can trust it, and every number here is reproducible from the input
 structure plus a named citation.
+
+One honest caveat, because the distinction is easy to blur: **`clogp` is a
+fitted model**, not graph arithmetic. Wildman & Crippen regressed atom-type
+contributions against experimental logP, so it is an *estimate* of a physical
+property — paracetamol computes 1.35 against an experimental 0.46. It is
+deterministic, reproducible and citable, and it is still a prediction. Every
+other descriptor is exact given the structure.
 
 ---
 
@@ -25,11 +31,11 @@ that specifies exactly what it must do.
 ```bash
 make install
 make test-api     # 27 passed   <- the service
-make test-chem    # 34 passed, 34 failed   <- the spec you are implementing
+make test-chem    # 57 passed, 31 failed   <- the spec you are implementing
 ```
 
-`parse.py` is implemented (see [the stereo note](#a-trap-worth-knowing-about));
-the remaining eight modules are stubs.
+`parse.py` and `descriptors.py` are implemented (see
+[traps](#traps-worth-knowing-about)); the remaining seven modules are stubs.
 
 Start the server against the stubs and it behaves correctly: jobs are accepted,
 dispatched, and fail with a message naming the exact stub that stopped them.
@@ -139,7 +145,7 @@ makes the next testable:
 | # | Module | What it does | Watch out for |
 |---|---|---|---|
 | 1 | ~~`parse.py`~~ **done** | SMILES → sanitised, standardised mol + InChIKey | — |
-| 2 | `descriptors.py` | MW, clogP, TPSA, HBD/HBA, RotB, Fsp3, stereo | Keys must match the `Descriptors` schema exactly |
+| 2 | ~~`descriptors.py`~~ **done** | MW, clogP, TPSA, HBD/HBA, RotB, Fsp3, stereo | — |
 | 3 | `rules.py` | Lipinski, Veber, Egan, Ghose, lead-like, Ro3 | **Lipinski permits one violation** — the most-mis-implemented rule in cheminformatics |
 | 4 | `alerts.py` | PAINS / BRENK / NIH via RDKit `FilterCatalog` | Build each catalog **once**; rebuilding per molecule is ~10× the runtime |
 | 5 | `scaffolds.py` | Bemis–Murcko | Acyclic → `None`, not `""` |
@@ -159,7 +165,7 @@ give the same answer as once; the counts must reconcile
 (`parsed + parse_failed == submitted`). Read the test before writing the
 function.
 
-### A trap worth knowing about
+### Traps worth knowing about
 
 RDKit's `TautomerEnumerator` **strips defined sp3 stereochemistry by default**.
 `CleanupParameters.tautomerRemoveSp3Stereo` is `True` out of the box, and it
@@ -180,14 +186,22 @@ Two smaller ones, both pinned by tests: `MolFromSmiles("")` returns an **empty
 `Mol`, not `None`**, and `"*"` / `"[*]"` (R-group placeholders, common in vendor
 SMILES columns) parse and sanitise cleanly, then report MW 0.
 
+A third, in `descriptors.py`: **average mass, not monoisotopic**.
+`Descriptors.MolWt` gives 180.159 for aspirin, `ExactMolWt` gives 180.042.
+Drug-likeness rules are written against the average. And HBD/HBA use RDKit's
+refined SMARTS rather than Lipinski's literal "count all N and O", which for
+aspirin is 3 acceptors rather than 4 — the standard choice, but a borderline
+compound can disagree with a tool that took the paper literally.
+
 ### Throughput
 
-Measured on this machine, per core, over a mixed 5k library:
+Measured on this machine, per core:
 
-| | mol/s/core | 200k library, 8 cores |
+| stage | mol/s/core | 200k library, 8 cores |
 |---|---|---|
-| with canonical tautomer | ~780 | ~32 s |
-| `canonical_tautomer=False` | ~2400 | ~11 s |
+| parse + standardise, with canonical tautomer | ~780 | ~32 s |
+| parse + standardise, `canonical_tautomer=False` | ~2400 | ~11 s |
+| descriptors | ~3200 | ~8 s |
 
 The tautomer pass costs about 3× and buys keto/enol forms of one compound
 deduplicating against each other. It is on by default.
