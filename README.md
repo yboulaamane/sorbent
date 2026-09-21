@@ -24,26 +24,46 @@ other descriptor is exact given the structure.
 
 ## Status
 
-The **service is complete and runs**. The **science layer is stubs** — every
-function in `src/winnow/chem/` raises `NotImplementedError` behind a docstring
-that specifies exactly what it must do.
+**Complete and working.** All 211 tests pass; `ruff`, `ruff format` and `mypy`
+are clean.
 
 ```bash
 make install
-make test-api     # 27 passed   <- the service
-make test-chem    # 173 passed, 11 failed  <- the spec you are implementing
+make test        # 211 passed
+make run         # http://localhost:8000/docs
 ```
 
-All of `chem/` is implemented except `pipeline.py` (see
-[traps](#traps-worth-knowing-about)).
-
-Start the server against the stubs and it behaves correctly: jobs are accepted,
-dispatched, and fail with a message naming the exact stub that stopped them.
+A real run, 5,250 records uploaded as a `.smi` file, finished in 9.5 s across
+three chunks on the process pool:
 
 ```
-$ curl -s localhost:8000/v1/jobs/$ID | jq -r .error
-not implemented yet: pipeline.py:53 in process_chunk()
+submitted            5250
+parsed               5200
+parse_failed           50
+duplicates_removed   2112     <- 40% of the library was redundant
+retained             3088
+clusters             2617
 ```
+
+and the report that comes back ranks them:
+
+```
+ # id                score     MW  cl  rep    rules  alerts
+ 1 diazepam          0.928  284.7   4  yes       YY  clean
+ 2 ibuprofen         0.878  206.3   6  yes       YY  clean
+ 3 salicylic         0.867  138.1   7  yes       YY  clean
+ 4 caffeine          0.840  194.2   5  yes       YY  clean
+ 5 aspirin           0.715  180.2   8  yes       YY  phenol_ester
+ 6 paracetamol       0.692  151.2   1  yes       YY  hydroquinone
+ 8 catechol          0.607  110.1   3  yes       YY  catechol_A(92), catechol
+ 9 erythromycin      0.455  733.9   0  yes       NN  clean
+10 aspirin_sodium        —      —   —    —        —  duplicate of aspirin
+11 broken                —      —   —    —        —  could not parse SMILES 'C((('
+```
+
+Every number there is reproducible from the structure. The one caveat is
+`clogp`, and the one thing not to trust blindly is the score — see
+[the limitation](#a-limitation-you-should-know-before-trusting-the-ranking).
 
 ---
 
@@ -136,11 +156,10 @@ one never awaits, precisely so that swap costs nothing.
 
 ---
 
-## What you implement
+## The science layer
 
-Nine modules under [`src/winnow/chem/`](src/winnow/chem/). Each stub carries the
-algorithm, the RDKit calls to use, and the traps. Suggested order — each step
-makes the next testable:
+Nine modules under [`src/winnow/chem/`](src/winnow/chem/), each documenting the
+algorithm, the RDKit calls and the traps found while building it:
 
 | # | Module | What it does | Watch out for |
 |---|---|---|---|
@@ -152,18 +171,17 @@ makes the next testable:
 | 6 | ~~`fingerprints.py`~~ **done** | ECFP4 + Tanimoto | — |
 | 7 | ~~`cluster.py`~~ **done** | Butina | — |
 | 8 | ~~`score.py`~~ **done** | Composite score + breakdown | — |
-| 9 | `pipeline.py` | Composes 1–8 across the two phases | Only picklable args; must never raise |
+| 9 | ~~`pipeline.py`~~ **done** | Composes 1–8 across the two phases | — |
 
 ```bash
-make test-chem              # the whole spec
+make test-chem                             # the science layer
 .venv/bin/pytest -m chem -k lipinski -x    # one function at a time
 ```
 
 The contract tests are not tautologies — they encode real properties. Aspirin
 must be closer to salicylic acid than to caffeine; standardising twice must
 give the same answer as once; the counts must reconcile
-(`parsed + parse_failed == submitted`). Read the test before writing the
-function.
+(`parsed + parse_failed == submitted`).
 
 ### Traps worth knowing about
 
@@ -361,6 +379,23 @@ Everything is `WINNOW_`-prefixed; see [`.env.example`](.env.example) and
 | `WINNOW_MAX_SYNC_BATCH` | 100 | Cap on the synchronous endpoints |
 
 ---
+
+## What the report contains
+
+The output is an audit trail, not just a shortlist — but not indiscriminate
+either:
+
+- **Parse failures, duplicates and filter drops are always reported.** These
+  are findings *about your library* — that 40% of it was redundant, that 50
+  records would not parse — and they are the most actionable thing the tool
+  knows.
+- **Retained molecules outside `top_n` / `representatives_only` are not.**
+  They are not problems, merely surplus to what you asked for, and
+  `counts.retained` says how many there were. Returning 200,000 records when
+  you asked for the best 100 serves nobody.
+
+So `score is not None` identifies exactly the shortlist, and everything else
+carries a reason.
 
 ## Known limits
 

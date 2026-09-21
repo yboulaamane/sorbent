@@ -18,7 +18,5 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: mypy src/winnow
-      # Only the API suite gates CI. The chem suite is the implementation
-      # spec - it is expected to fail until the stubs are filled in. Move it
-      # into this job once it passes.
-      - run: pytest -q -m "not chem"
+      # The whole suite gates CI now that the chem layer is implemented.
+      - run: pytest -q
