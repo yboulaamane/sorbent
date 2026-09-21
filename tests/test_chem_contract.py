@@ -720,6 +720,115 @@ def test_acyclic_molecule_has_no_scaffold():
     assert murcko_scaffold(parse_smiles("CCCCO")) is None
 
 
+@pytest.mark.parametrize("smiles", ["CCCCO", "C", "CC(=O)O", "N", "CCCCCCCC"])
+def test_acyclic_inputs_give_none_from_both_variants(smiles):
+    """RDKit returns a zero-atom Mol, whose SMILES is '' - indistinguishable
+    from a failure once it lands in a report."""
+    from rdkit import Chem
+
+    from winnow.chem.scaffolds import generic_scaffold, murcko_scaffold
+
+    mol = Chem.MolFromSmiles(smiles)
+    assert murcko_scaffold(mol) is None
+    assert generic_scaffold(mol) is None
+
+
+def test_scaffold_is_written_without_stereochemistry():
+    """Regression: kept, the two enantiomers of nicotine scaffold to
+    c1cncc([C@@H]2CCCN2)c1 and c1cncc([C@H]2CCCN2)c1 and land in different
+    groups, which defeats the point of a scaffold as a chemotype key. RDKit's
+    own MurckoScaffoldSmiles defaults to includeChirality=False."""
+    from winnow.chem.parse import parse_smiles
+    from winnow.chem.scaffolds import murcko_scaffold
+
+    scaffolds = {
+        murcko_scaffold(parse_smiles(s))
+        for s in ["CN1CCC[C@H]1c1cccnc1", "CN1CCC[C@@H]1c1cccnc1", "CN1CCCC1c1cccnc1"]
+    }
+    assert scaffolds == {"c1cncc(C2CCCN2)c1"}
+
+
+def test_side_chains_are_stripped_but_ring_systems_and_linkers_kept():
+    from winnow.chem.parse import parse_smiles
+    from winnow.chem.scaffolds import murcko_scaffold
+
+    # Long side chains go; the biaryl linker stays.
+    assert murcko_scaffold(parse_smiles("CC(C)Cc1ccc(cc1)C(C)C(=O)O")) == "c1ccccc1"
+    assert murcko_scaffold(parse_smiles("c1ccccc1CCc1ccncc1")) == "c1ccc(CCc2ccncc2)cc1"
+
+
+def test_exocyclic_double_bond_on_a_ring_atom_is_retained():
+    """Genuine Bemis-Murcko behaviour, and a common surprise: a ring ketone is
+    a different scaffold from its parent ring. A side-chain carbonyl is
+    stripped as normal."""
+    from rdkit import Chem
+
+    from winnow.chem.scaffolds import murcko_scaffold
+
+    assert murcko_scaffold(Chem.MolFromSmiles("O=C1CCCCC1")) == "O=C1CCCCC1"
+    assert murcko_scaffold(Chem.MolFromSmiles("C1CCCCC1")) == "C1CCCCC1"
+    assert murcko_scaffold(Chem.MolFromSmiles("O=C(c1ccccc1)C")) == "c1ccccc1"
+
+
+def test_generic_scaffold_collapses_heteroatoms_and_aromaticity():
+    from rdkit import Chem
+
+    from winnow.chem.scaffolds import generic_scaffold
+
+    for smiles in ["c1ccccc1", "C1CCCCC1", "c1ccncc1"]:
+        assert generic_scaffold(Chem.MolFromSmiles(smiles)) == "C1CCCCC1"
+
+
+def test_generic_scaffold_does_not_remove_exocyclic_atoms():
+    """It recolours them rather than dropping them, so a ring ketone stays
+    distinct from the bare ring even in the generic form."""
+    from rdkit import Chem
+
+    from winnow.chem.scaffolds import generic_scaffold
+
+    assert generic_scaffold(Chem.MolFromSmiles("O=C1CCCCC1")) == "CC1CCCCC1"
+    assert generic_scaffold(Chem.MolFromSmiles("C1CCCCC1")) == "C1CCCCC1"
+
+
+def test_scaffold_does_not_mutate_the_input():
+    from rdkit import Chem
+
+    from winnow.chem.parse import parse_smiles
+    from winnow.chem.scaffolds import generic_scaffold, murcko_scaffold
+
+    mol = parse_smiles("CC(C)Cc1ccc(cc1)C(C)C(=O)O")
+    before = Chem.MolToSmiles(mol)
+    murcko_scaffold(mol)
+    generic_scaffold(mol)
+    assert Chem.MolToSmiles(mol) == before
+
+
+@pytest.mark.parametrize(
+    "smiles",
+    [
+        "O=S(=O)(c1ccccc1)N1CCCC1",
+        "N.N.Cl[Pt]Cl",
+        "OB(O)c1ccccc1",
+        "C[Si]1(C)CCCC1",
+        "c1ccc2c(c1)[nH]c1ccccc12",
+        "O=P(O)(O)c1ccccc1",
+        "C1CC2CCC1CC2",
+        "[Se]1CCCC1",
+        "*c1ccccc1",
+    ],
+)
+def test_awkward_chemistry_yields_valid_or_absent_scaffolds(smiles):
+    """Neither variant may raise, and anything returned must be parseable."""
+    from rdkit import Chem
+
+    from winnow.chem.scaffolds import generic_scaffold, murcko_scaffold
+
+    mol = Chem.MolFromSmiles(smiles)
+    for result in (murcko_scaffold(mol), generic_scaffold(mol)):
+        if result is not None:
+            assert Chem.MolFromSmiles(result) is not None, result
+
+
 # --- fingerprints -----------------------------------------------------------
 
 
