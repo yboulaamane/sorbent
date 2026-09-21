@@ -860,6 +860,131 @@ def test_bulk_matches_pairwise(small_library):
     assert bulk_tanimoto(fps[0], fps[1:]) == pytest.approx([tanimoto(fps[0], f) for f in fps[1:]])
 
 
+def test_generator_is_cached_per_parameter_set():
+    from winnow.chem.fingerprints import get_generator
+
+    assert get_generator(2, 2048) is get_generator(2, 2048)
+    assert get_generator(2, 2048) is not get_generator(3, 2048)
+    assert get_generator(2, 2048) is not get_generator(2, 1024)
+
+
+def test_default_radius_is_two_not_rdkits_three(aspirin):
+    """GetMorganGenerator defaults to radius 3 (ECFP6). Leaving it out would
+    silently give a different fingerprint from the documented ECFP4."""
+    from winnow.chem.fingerprints import compute_fingerprint
+    from winnow.chem.parse import parse_smiles
+
+    mol = parse_smiles(aspirin)
+    default = compute_fingerprint(mol).GetNumOnBits()
+    assert default == compute_fingerprint(mol, radius=2).GetNumOnBits()
+    assert (
+        compute_fingerprint(mol, radius=2).GetNumOnBits()
+        != compute_fingerprint(mol, radius=3).GetNumOnBits()
+    )
+
+
+def test_fingerprint_honours_bit_size(aspirin):
+    from winnow.chem.fingerprints import compute_fingerprint
+    from winnow.chem.parse import parse_smiles
+
+    mol = parse_smiles(aspirin)
+    for n_bits in (512, 1024, 2048, 4096):
+        assert len(compute_fingerprint(mol, n_bits=n_bits)) == n_bits
+
+
+def test_tanimoto_is_bounded_and_symmetric(small_library):
+    from winnow.chem.fingerprints import compute_fingerprint, tanimoto
+    from winnow.chem.parse import parse_smiles
+
+    fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
+    for a in fps:
+        for b in fps:
+            score = tanimoto(a, b)
+            assert 0.0 <= score <= 1.0
+            assert score == tanimoto(b, a)
+
+
+def test_all_zero_fingerprints_give_zero_not_nan():
+    """The 0/0 case. A NaN distance would propagate silently through Butina
+    clustering; RDKit returns 0.0, and this pins that."""
+    import math
+
+    from rdkit.DataStructs import ExplicitBitVect
+
+    from winnow.chem.fingerprints import bulk_tanimoto, compute_fingerprint, tanimoto
+    from winnow.chem.parse import parse_smiles
+
+    zero, other_zero = ExplicitBitVect(2048), ExplicitBitVect(2048)
+    real = compute_fingerprint(parse_smiles("CCO"))
+
+    assert tanimoto(zero, other_zero) == 0.0
+    assert not math.isnan(tanimoto(zero, other_zero))
+    assert tanimoto(zero, real) == 0.0
+    assert bulk_tanimoto(zero, [other_zero, real]) == [0.0, 0.0]
+
+
+def test_bulk_tanimoto_handles_empty_targets(aspirin):
+    """Keeps the distance-matrix builder in cluster.py free of a special case
+    for its first row."""
+    from winnow.chem.fingerprints import bulk_tanimoto, compute_fingerprint
+    from winnow.chem.parse import parse_smiles
+
+    assert bulk_tanimoto(compute_fingerprint(parse_smiles(aspirin)), []) == []
+
+
+def test_similarity_values_are_plain_floats(small_library):
+    """Not numpy scalars - these end up in a Pydantic model and in JSON."""
+    from winnow.chem.fingerprints import bulk_tanimoto, compute_fingerprint, tanimoto
+    from winnow.chem.parse import parse_smiles
+
+    fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
+    assert type(tanimoto(fps[0], fps[1])) is float
+    assert all(type(x) is float for x in bulk_tanimoto(fps[0], fps[1:]))
+
+
+def test_fingerprints_survive_pickling(small_library):
+    """They cross a process boundary on the way back from a worker - see the
+    two-phase split in chem/pipeline.py."""
+    import pickle
+
+    from winnow.chem.fingerprints import compute_fingerprint, tanimoto
+    from winnow.chem.parse import parse_smiles
+
+    fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
+    restored = pickle.loads(pickle.dumps(fps))
+    assert all(tanimoto(a, b) == 1.0 for a, b in zip(fps, restored, strict=True))
+
+
+def test_enantiomers_are_identical_by_default():
+    """includeChirality is off, matching scaffolds.py: clustering is about
+    chemotype, and configuration lives on standard_smiles."""
+    from winnow.chem.fingerprints import compute_fingerprint, tanimoto
+    from winnow.chem.parse import parse_smiles
+
+    left = compute_fingerprint(parse_smiles("CN1CCC[C@H]1c1cccnc1"))
+    right = compute_fingerprint(parse_smiles("CN1CCC[C@@H]1c1cccnc1"))
+    assert tanimoto(left, right) == 1.0
+
+
+def test_nearest_neighbour_is_chemically_sensible():
+    """Aspirin's closest neighbour among common drugs is salicylic acid, its
+    own hydrolysis product. If this fails the fingerprint is wired up wrong."""
+    from winnow.chem.fingerprints import bulk_tanimoto, compute_fingerprint
+    from winnow.chem.parse import parse_smiles
+
+    others = {
+        "salicylic": "OC(=O)c1ccccc1O",
+        "paracetamol": "CC(=O)Nc1ccc(O)cc1",
+        "ibuprofen": "CC(C)Cc1ccc(cc1)C(C)C(=O)O",
+        "caffeine": "Cn1cnc2c1c(=O)n(C)c(=O)n2C",
+        "nicotine": "CN1CCC[C@H]1c1cccnc1",
+    }
+    query = compute_fingerprint(parse_smiles("CC(=O)Oc1ccccc1C(=O)O"))
+    names = list(others)
+    scores = bulk_tanimoto(query, [compute_fingerprint(parse_smiles(others[n])) for n in names])
+    assert names[scores.index(max(scores))] == "salicylic"
+
+
 # --- clustering -------------------------------------------------------------
 
 
