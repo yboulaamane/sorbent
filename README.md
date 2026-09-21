@@ -31,12 +31,11 @@ that specifies exactly what it must do.
 ```bash
 make install
 make test-api     # 27 passed   <- the service
-make test-chem    # 135 passed, 18 failed  <- the spec you are implementing
+make test-chem    # 152 passed, 14 failed  <- the spec you are implementing
 ```
 
-`parse.py`, `descriptors.py`, `rules.py`, `alerts.py`, `scaffolds.py` and
-`fingerprints.py` are implemented (see [traps](#traps-worth-knowing-about));
-the remaining three modules are stubs.
+All of `chem/` is implemented except `score.py` and `pipeline.py` (see
+[traps](#traps-worth-knowing-about)).
 
 Start the server against the stubs and it behaves correctly: jobs are accepted,
 dispatched, and fail with a message naming the exact stub that stopped them.
@@ -151,7 +150,7 @@ makes the next testable:
 | 4 | ~~`alerts.py`~~ **done** | PAINS / BRENK / NIH via RDKit `FilterCatalog` | — |
 | 5 | ~~`scaffolds.py`~~ **done** | Bemis–Murcko | — |
 | 6 | ~~`fingerprints.py`~~ **done** | ECFP4 + Tanimoto | — |
-| 7 | `cluster.py` | Butina | O(n²) — will not fit at 200k. Cap it, or use `LeaderPicker` |
+| 7 | ~~`cluster.py`~~ **done** | Butina | — |
 | 8 | `score.py` | Composite score + breakdown | Must stay in [0,1] for *any* caller weights |
 | 9 | `pipeline.py` | Composes 1–8 across the two phases | Only picklable args; must never raise |
 
@@ -223,6 +222,29 @@ so a client highlighting it shows the other as clean. `alerts.py` takes the
 SMARTS off the match and re-runs it for all occurrences, giving
 `[0,1,2,9,10,11]`. Costs ~13%, paid only when an alert actually fires.
 
+The biggest one, in `cluster.py`: **feed `Butina.ClusterData` a square matrix,
+not the flat lower triangle.** `ClusterData` is pure Python, and given a 1D
+triangle it starts by doing this:
+
+```python
+dist_matrix = np.zeros((nPts, nPts))    # full n×n, float64
+idx = np.tril_indices(nPts, -1)         # two int64 arrays of n(n-1)/2
+```
+
+So a compact float32 triangle is expanded into a float64 square *plus* index
+arrays twice its size. Hand it a correctly shaped n×n array and it skips all of
+that, keeping your dtype. Measured peak allocation, identical clusterings from
+both paths:
+
+| n | 1D triangle | 2D square |
+|---|---|---|
+| 2,000 | 104 MB | 17 MB |
+| 4,000 | 416 MB | 65 MB |
+| 6,000 | 936 MB | 147 MB |
+
+At the 20,000 cap that is ~7.2 GB against 1.6 GB. None of this is visible from
+the documented API — only from RDKit's source.
+
 Two in `fingerprints.py`, one of them compounding the other. **ECFP4 is radius
 2** — the number in the name is the diameter. And `GetMorganGenerator`'s own
 default radius is **3**, so omitting the parameter silently gives you ECFP6
@@ -269,6 +291,19 @@ Measured on this machine, per core:
 | Murcko scaffolds | ~14800 | ~2 s |
 | generic scaffolds | ~6100 | ~4 s |
 | ECFP4 fingerprints | ~106k | <1 s |
+
+Butina clustering does not fit that table, because it is O(n²) and does not
+scale with cores:
+
+| n | time | peak memory |
+|---|---|---|
+| 6,000 | 12 s | 0.15 GB |
+| 20,000 | ~140 s | 1.6 GB — `MAX_EXACT_CLUSTER_SIZE` |
+| 250,000 | — | ~100 GB, i.e. never |
+
+Above the cap `butina_cluster` refuses with an error naming the alternatives:
+cluster the Murcko scaffolds instead (10–50× fewer), or use sphere exclusion
+(`rdSimDivPickers.LeaderPicker`), which is O(n·k) and streams.
 
 The tautomer pass costs about 3× and buys keto/enol forms of one compound
 deduplicating against each other. It is on by default.

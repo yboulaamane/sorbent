@@ -1032,6 +1032,146 @@ def test_oversized_input_is_refused_clearly():
         butina_cluster([None] * (MAX_EXACT_CLUSTER_SIZE + 1))
 
 
+def test_oversized_refusal_does_not_touch_the_fingerprints():
+    """The list is all None. If the size check ran after any fingerprint work
+    this would raise TypeError instead, and a real oversized call would spend
+    minutes before failing."""
+    from winnow.chem.cluster import MAX_EXACT_CLUSTER_SIZE, butina_cluster
+
+    with pytest.raises(ValueError, match="(?i)refused"):
+        butina_cluster([None] * (MAX_EXACT_CLUSTER_SIZE + 1))
+
+
+def test_refusal_names_an_alternative():
+    """A cap with no way forward is a dead end, not an error message."""
+    from winnow.chem.cluster import MAX_EXACT_CLUSTER_SIZE, butina_cluster
+
+    with pytest.raises(ValueError, match="(?i)scaffold|LeaderPicker|sphere"):
+        butina_cluster([None] * (MAX_EXACT_CLUSTER_SIZE + 1))
+
+
+@pytest.mark.parametrize(("n", "expected"), [(0, []), (1, [[0]])])
+def test_degenerate_sizes(n, expected, small_library):
+    from winnow.chem.cluster import butina_cluster
+    from winnow.chem.fingerprints import compute_fingerprint
+    from winnow.chem.parse import parse_smiles
+
+    fps = [compute_fingerprint(parse_smiles(s)) for s in small_library[:n]]
+    assert butina_cluster(fps) == expected
+
+
+def test_distance_matrix_is_float32_not_a_python_list(small_library):
+    """A list of floats costs ~25 bytes an entry, which is 6.4 GB at the
+    20,000 cap - a promise the code could not keep."""
+    import numpy as np
+
+    from winnow.chem.cluster import build_distance_matrix
+    from winnow.chem.fingerprints import compute_fingerprint
+    from winnow.chem.parse import parse_smiles
+
+    fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
+    matrix = build_distance_matrix(fps)
+    assert isinstance(matrix, np.ndarray)
+    assert matrix.dtype == np.float32
+
+
+def test_distance_matrix_layout_matches_pairwise_tanimoto(small_library):
+    """Row-major lower triangle: for molecule i, distances to 0..i-1. Get this
+    wrong and clustering silently groups the wrong molecules."""
+    from winnow.chem.cluster import build_distance_matrix
+    from winnow.chem.fingerprints import compute_fingerprint, tanimoto
+    from winnow.chem.parse import parse_smiles
+
+    fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
+    matrix = build_distance_matrix(fps)
+    position = 0
+    for i in range(1, len(fps)):
+        for j in range(i):
+            assert matrix[position] == pytest.approx(1.0 - tanimoto(fps[i], fps[j]), abs=1e-6)
+            position += 1
+
+
+def test_chemical_families_cluster_together():
+    """Three salicylates, two xanthines, two profens and one unrelated base.
+    If the distance matrix were transposed or misaligned this would scramble.
+    """
+    from winnow.chem.cluster import butina_cluster
+    from winnow.chem.fingerprints import compute_fingerprint
+    from winnow.chem.parse import parse_smiles
+
+    families = {
+        "salicylate": ["CC(=O)Oc1ccccc1C(=O)O", "OC(=O)c1ccccc1O", "CC(=O)Oc1ccccc1C(=O)OC"],
+        "xanthine": ["Cn1cnc2c1c(=O)n(C)c(=O)n2C", "CN1C=NC2=C1C(=O)NC(=O)N2C"],
+        "profen": ["CC(C)Cc1ccc(cc1)C(C)C(=O)O", "CC(C)Cc1ccc(cc1)C(C)C(=O)OC"],
+        "other": ["CN1CCC[C@H]1c1cccnc1"],
+    }
+    labels, smiles = [], []
+    for family, members in families.items():
+        labels.extend([family] * len(members))
+        smiles.extend(members)
+
+    fps = [compute_fingerprint(parse_smiles(s)) for s in smiles]
+    for members in butina_cluster(fps, cutoff=0.7):
+        assert len({labels[i] for i in members}) == 1, [labels[i] for i in members]
+
+
+def test_centroid_is_the_most_central_member():
+    """Butina puts the centroid first, and Winnow's contract preserves that
+    through the largest-first sort."""
+    from winnow.chem.cluster import butina_cluster
+    from winnow.chem.fingerprints import compute_fingerprint, tanimoto
+    from winnow.chem.parse import parse_smiles
+
+    fps = [
+        compute_fingerprint(parse_smiles(s))
+        for s in ["CC(=O)Oc1ccccc1C(=O)O", "OC(=O)c1ccccc1O", "CC(=O)Oc1ccccc1C(=O)OC"]
+    ]
+    (cluster,) = butina_cluster(fps, cutoff=0.7)
+    centrality = {i: sum(tanimoto(fps[i], fps[j]) for j in cluster if j != i) for i in cluster}
+    assert cluster[0] == max(centrality, key=lambda i: centrality[i])
+
+
+def test_clustering_is_deterministic(small_library):
+    """as_completed reorders chunks upstream; a clustering that varied run to
+    run would make the whole report non-reproducible."""
+    from winnow.chem.cluster import butina_cluster
+    from winnow.chem.fingerprints import compute_fingerprint
+    from winnow.chem.parse import parse_smiles
+
+    fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
+    runs = {tuple(tuple(c) for c in butina_cluster(fps, cutoff=0.5)) for _ in range(5)}
+    assert len(runs) == 1
+
+
+def test_assign_clusters_rejects_out_of_range_index():
+    from winnow.chem.cluster import assign_clusters
+
+    with pytest.raises(ValueError, match="outside"):
+        assign_clusters([[0, 99]], 3)
+
+
+def test_assign_clusters_rejects_a_molecule_in_two_clusters():
+    from winnow.chem.cluster import assign_clusters
+
+    with pytest.raises(ValueError, match="both cluster"):
+        assign_clusters([[0, 1], [1, 2]], 3)
+
+
+def test_assign_clusters_rejects_incomplete_coverage():
+    """Butina partitions completely. Holes would surface much later as a null
+    cluster_id on an arbitrary molecule."""
+    from winnow.chem.cluster import assign_clusters
+
+    with pytest.raises(ValueError, match="no cluster"):
+        assign_clusters([[0]], 3)
+
+
+def test_assign_clusters_handles_empty():
+    from winnow.chem.cluster import assign_clusters
+
+    assert assign_clusters([], 0) == []
+
+
 # --- score ------------------------------------------------------------------
 
 
