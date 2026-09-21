@@ -1218,3 +1218,208 @@ def test_breakdown_reports_unweighted_components(aspirin):
     _, breakdown = composite_score(desc, [], 0, {"rule_compliance": 1.0, "alert_penalty": 1.0})
     assert "rule_compliance" in breakdown and "alert_penalty" in breakdown
     assert breakdown["alert_penalty"] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize(
+    ("n_alerts", "expected"),
+    [(0, 1.0), (1, 0.5), (2, 1 / 3), (3, 0.25), (6, 1 / 7)],
+)
+def test_alert_penalty_decays_reciprocally(n_alerts, expected):
+    """The first hit costs half; the sixth barely moves it. That matches how
+    an alert list actually reads."""
+    from winnow.chem.score import alert_penalty
+
+    assert alert_penalty(n_alerts) == pytest.approx(expected)
+
+
+def test_alert_penalty_rejects_negative():
+    from winnow.chem.score import alert_penalty
+
+    with pytest.raises(ValueError, match="negative"):
+        alert_penalty(-1)
+
+
+def test_rule_compliance_is_one_when_nothing_was_requested():
+    """No evidence against is not evidence for, but penalising a molecule for
+    a question nobody asked would be worse."""
+    from winnow.chem.score import rule_compliance
+
+    assert rule_compliance([]) == 1.0
+
+
+def test_rule_compliance_is_the_pass_fraction():
+    from winnow.chem.score import rule_compliance
+
+    rules = [{"passed": True}, {"passed": False}, {"passed": True}, {"passed": False}]
+    assert rule_compliance(rules) == 0.5
+    assert rule_compliance([{"passed": True}]) == 1.0
+    assert rule_compliance([{"passed": False}]) == 0.0
+
+
+def test_property_centrality_peaks_at_the_targets():
+    from winnow.chem.score import (
+        TARGET_CLOGP,
+        TARGET_MW,
+        TARGET_TPSA,
+        property_centrality,
+    )
+
+    on_target = {
+        "molecular_weight": TARGET_MW,
+        "clogp": TARGET_CLOGP,
+        "tpsa": TARGET_TPSA,
+    }
+    assert property_centrality(on_target) == pytest.approx(1.0)
+    off = dict(on_target, molecular_weight=TARGET_MW + 300)
+    assert property_centrality(off) < 0.2
+
+
+def test_property_centrality_is_a_product_not_a_mean():
+    """Being badly wrong on one axis should sink the component regardless of
+    the other two, the way a chemist reads it."""
+    from winnow.chem.score import TARGET_CLOGP, TARGET_MW, TARGET_TPSA, property_centrality
+
+    perfect = {"molecular_weight": TARGET_MW, "clogp": TARGET_CLOGP, "tpsa": TARGET_TPSA}
+    one_bad = dict(perfect, clogp=TARGET_CLOGP + 8)
+    assert property_centrality(one_bad) < 0.01 * property_centrality(perfect)
+
+
+def test_complexity_penalty_ignores_an_ordinary_ring_count():
+    from winnow.chem.score import COMFORTABLE_RINGS, complexity_penalty
+
+    for rings in range(COMFORTABLE_RINGS + 1):
+        assert complexity_penalty({"rings": rings, "unassigned_stereocentres": 0}) == 1.0
+    assert complexity_penalty({"rings": COMFORTABLE_RINGS + 2, "unassigned_stereocentres": 0}) < 1.0
+
+
+def test_complexity_penalty_punishes_undefined_stereo():
+    """A vendor who has not defined a centre cannot sell you one enantiomer."""
+    from winnow.chem.score import complexity_penalty
+
+    clean = complexity_penalty({"rings": 1, "unassigned_stereocentres": 0})
+    messy = complexity_penalty({"rings": 1, "unassigned_stereocentres": 4})
+    assert clean == 1.0
+    assert messy < 0.5
+
+
+def test_composite_rejects_unknown_component_name(aspirin):
+    """A typo that silently dropped a component would be the worst kind of bug
+    in a file that decides an ordering."""
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+    from winnow.chem.score import composite_score
+
+    desc = compute_descriptors(parse_smiles(aspirin))
+    with pytest.raises(KeyError, match="unknown score component"):
+        composite_score(desc, [], 0, {"rule_complaince": 1.0})
+
+
+def test_composite_rejects_negative_and_empty_weights(aspirin):
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+    from winnow.chem.score import composite_score
+
+    desc = compute_descriptors(parse_smiles(aspirin))
+    with pytest.raises(ValueError, match="negative"):
+        composite_score(desc, [], 0, {"rule_compliance": -1.0})
+    with pytest.raises(ValueError, match="positive"):
+        composite_score(desc, [], 0, {})
+    with pytest.raises(ValueError, match="positive"):
+        composite_score(desc, [], 0, {"rule_compliance": 0.0})
+
+
+def test_breakdown_mirrors_the_weights_exactly(aspirin):
+    """So the caller can reproduce the arithmetic, and so no descriptor is
+    demanded for a component nobody asked for."""
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+    from winnow.chem.score import composite_score
+
+    desc = compute_descriptors(parse_smiles(aspirin))
+    weights = {"rule_compliance": 2.0, "alert_penalty": 1.0}
+    score, breakdown = composite_score(desc, [], 1, weights)
+    assert set(breakdown) == set(weights)
+    expected = (2.0 * breakdown["rule_compliance"] + 1.0 * breakdown["alert_penalty"]) / 3.0
+    assert score == pytest.approx(expected)
+
+
+def test_composite_needs_no_descriptors_for_unweighted_components():
+    """rule_compliance and alert_penalty do not touch desc at all."""
+    from winnow.chem.score import composite_score
+
+    score, breakdown = composite_score({}, [], 2, {"alert_penalty": 1.0})
+    assert score == pytest.approx(1 / 3)
+    assert set(breakdown) == {"alert_penalty"}
+
+
+def test_score_ranks_real_drugs_above_junk():
+    """The point of the whole file. Uses lower-bounded Ghose and a MW window,
+    which is how the limitation below is meant to be handled."""
+    from winnow.chem.alerts import find_alerts
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+    from winnow.chem.rules import evaluate
+    from winnow.chem.score import composite_score
+    from winnow.schemas.filters import AlertCatalog, RuleSet
+
+    weights = {
+        "rule_compliance": 1.0,
+        "alert_penalty": 1.0,
+        "property_centrality": 1.0,
+        "complexity_penalty": 0.25,
+    }
+    library = {
+        "diazepam": "CN1c2ccc(Cl)cc2C(=NCC1=O)c1ccccc1",
+        "ibuprofen": "CC(C)Cc1ccc(cc1)C(C)C(=O)O",
+        "hexadecane": "CCCCCCCCCCCCCCCC",
+        "erythromycin": (
+            "CC[C@H]1OC(=O)[C@H](C)[C@@H](O[C@H]2C[C@@](C)(OC)[C@@H](O)[C@H](C)O2)"
+            "[C@H](C)[C@@H](O[C@@H]2O[C@H](C)C[C@@H]([C@H]2O)N(C)C)[C@](C)(O)"
+            "C[C@@H](C)C(=O)[C@H](C)[C@@H](O)[C@]1(C)O"
+        ),
+    }
+    scores = {}
+    for name, smiles in library.items():
+        mol = parse_smiles(smiles)
+        desc = compute_descriptors(mol)
+        rules = evaluate(desc, [RuleSet.LIPINSKI, RuleSet.VEBER, RuleSet.GHOSE])
+        alerts = find_alerts(mol, [AlertCatalog.PAINS, AlertCatalog.BRENK])
+        scores[name] = composite_score(desc, rules, len(alerts), weights)[0]
+
+    assert scores["diazepam"] > scores["hexadecane"]
+    assert scores["ibuprofen"] > scores["hexadecane"]
+    assert scores["diazepam"] > scores["erythromycin"]
+
+
+def test_known_limitation_trivially_small_molecules_score_high():
+    """Pins a documented weakness so it stays visible rather than being
+    rediscovered in a report.
+
+    Three of the four components measure the ABSENCE of problems, and water has
+    none: it passes Lipinski and Veber (upper bounds only), trips no alert, and
+    has no stereocentre or ring. Only property_centrality catches it, and at
+    the default weight that is 18% of the total.
+
+    The fix is a descriptor_windows minimum on molecular_weight, not weight
+    tuning - this score orders a list, it does not filter one. If this test
+    ever fails because the score dropped, someone changed the aggregation, and
+    the module docstring needs updating with it.
+    """
+    from winnow.chem.score import composite_score
+
+    water = {
+        "molecular_weight": 18.0,
+        "clogp": -0.8,
+        "tpsa": 1.0,
+        "rings": 0,
+        "unassigned_stereocentres": 0,
+    }
+    default_weights = {
+        "rule_compliance": 1.0,
+        "alert_penalty": 1.0,
+        "property_centrality": 0.5,
+        "complexity_penalty": 0.25,
+    }
+    score, breakdown = composite_score(water, [], 0, default_weights)
+    assert score > 0.8
+    assert breakdown["property_centrality"] < 0.01

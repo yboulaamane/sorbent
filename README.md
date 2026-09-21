@@ -31,10 +31,10 @@ that specifies exactly what it must do.
 ```bash
 make install
 make test-api     # 27 passed   <- the service
-make test-chem    # 152 passed, 14 failed  <- the spec you are implementing
+make test-chem    # 173 passed, 11 failed  <- the spec you are implementing
 ```
 
-All of `chem/` is implemented except `score.py` and `pipeline.py` (see
+All of `chem/` is implemented except `pipeline.py` (see
 [traps](#traps-worth-knowing-about)).
 
 Start the server against the stubs and it behaves correctly: jobs are accepted,
@@ -151,7 +151,7 @@ makes the next testable:
 | 5 | ~~`scaffolds.py`~~ **done** | Bemis–Murcko | — |
 | 6 | ~~`fingerprints.py`~~ **done** | ECFP4 + Tanimoto | — |
 | 7 | ~~`cluster.py`~~ **done** | Butina | — |
-| 8 | `score.py` | Composite score + breakdown | Must stay in [0,1] for *any* caller weights |
+| 8 | ~~`score.py`~~ **done** | Composite score + breakdown | — |
 | 9 | `pipeline.py` | Composes 1–8 across the two phases | Only picklable args; must never raise |
 
 ```bash
@@ -227,8 +227,8 @@ not the flat lower triangle.** `ClusterData` is pure Python, and given a 1D
 triangle it starts by doing this:
 
 ```python
-dist_matrix = np.zeros((nPts, nPts))    # full n×n, float64
-idx = np.tril_indices(nPts, -1)         # two int64 arrays of n(n-1)/2
+dist_matrix = np.zeros((nPts, nPts))  # full n×n, float64
+idx = np.tril_indices(nPts, -1)  # two int64 arrays of n(n-1)/2
 ```
 
 So a compact float32 triangle is expanded into a float64 square *plus* index
@@ -309,6 +309,44 @@ The tautomer pass costs about 3× and buys keto/enol forms of one compound
 deduplicating against each other. It is on by default.
 
 ---
+
+## A limitation you should know before trusting the ranking
+
+**The composite score has a high floor, and it is structural.** Three of its
+four components measure the *absence* of problems, and something trivially
+small has none. Water passes Lipinski and Veber (both are upper bounds only),
+trips no structural alert, and has neither a stereocentre nor a ring — so it
+scores 1.00 on three components and is rescued only by `property_centrality`,
+which at the default weight is 18% of the total. Measured, with the default
+weights and default rule sets:
+
+| | score | |
+|---|---|---|
+| diazepam | 0.928 | a real drug |
+| ibuprofen | 0.878 | |
+| caffeine | 0.840 | |
+| benzene | 0.829 | **not a lead** |
+| water | 0.821 | **not even a submission** |
+| aspirin | 0.715 | |
+| erythromycin | 0.455 | |
+
+Raising `property_centrality` to 2.0 moves water to 0.536; adding Ghose (the
+one rule set with lower bounds) moves it to 0.700. Neither fixes it, because a
+weighted mean of "nothing is wrong" cannot go low for a molecule with nothing
+wrong.
+
+**The fix is not weight tuning. This score orders a list; it does not filter
+one.** Remove implausible candidates before scoring, with a
+`descriptor_windows` minimum on `molecular_weight` (150–200 is usual) or a
+lower-bounded rule set. `finalize` applies windows as hard filters, so what
+reaches the scorer should already be plausible.
+
+If you want the score itself to filter, the aggregation has to become a
+weighted *geometric* mean, so a near-zero component sinks the total instead of
+being averaged away — that puts water at ~0.20 against diazepam's ~0.91. It
+changes every score the service emits, so it is a decision to make
+deliberately, not a tweak. A test pins the current behaviour so it cannot
+change silently.
 
 ## Config
 
