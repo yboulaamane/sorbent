@@ -62,8 +62,8 @@ and the report that comes back ranks them:
 ```
 
 Every number there is reproducible from the structure. The one caveat is
-`clogp`, and the one thing not to trust blindly is the score — see
-[the limitation](#a-limitation-you-should-know-before-trusting-the-ranking).
+`clogp`, and the score has a sharp edge worth reading before you trust the
+ranking — see [how the score works](#how-the-score-works-and-its-sharp-edge).
 
 ---
 
@@ -328,43 +328,72 @@ deduplicating against each other. It is on by default.
 
 ---
 
-## A limitation you should know before trusting the ranking
+## How the score works, and its sharp edge
 
-**The composite score has a high floor, and it is structural.** Three of its
-four components measure the *absence* of problems, and something trivially
-small has none. Water passes Lipinski and Veber (both are upper bounds only),
-trips no structural alert, and has neither a stereocentre nor a ring — so it
-scores 1.00 on three components and is rescued only by `property_centrality`,
-which at the default weight is 18% of the total. Measured, with the default
-weights and default rule sets:
+The composite score is a **weighted geometric mean** of four components, each
+in [0, 1]:
+
+    score = exp( sum(w_i * ln(c_i)) / sum(w_i) )
+
+Geometric rather than arithmetic, deliberately: a component near zero should
+sink the total rather than be averaged away. Under an arithmetic mean water
+scored **0.821** — it passes Lipinski and Veber (both upper bounds only), trips
+no alert and has no stereocentre or ring, so three of four components read 1.00
+and the fourth was outvoted. Geometrically it scores 0.465, benzene 0.596, and
+the six highest-scoring molecules in a mixed test set are all real drugs.
+
+**The cost is real: a component of exactly zero is close to a veto.**
+`rule_compliance` is 0.0 whenever every requested rule set fails, and with two
+rule sets it is quantised to {0, 0.5, 1}, so zero is easy to reach. Roughly a
+third of marketed oral drugs violate Ro5, and they now land at the bottom:
 
 | | score | |
 |---|---|---|
-| diazepam | 0.928 | a real drug |
-| ibuprofen | 0.878 | |
-| caffeine | 0.840 | |
-| benzene | 0.829 | **not a lead** |
-| water | 0.821 | **not even a submission** |
-| aspirin | 0.715 | |
-| erythromycin | 0.455 | |
+| atorvastatin | 0.0038 | marketed, fails Lipinski and Veber |
+| erythromycin | 0.0021 | marketed, fails Lipinski and Veber |
 
-Raising `property_centrality` to 2.0 moves water to 0.536; adding Ghose (the
-one rule set with lower bounds) moves it to 0.700. Neither fixes it, because a
-weighted mean of "nothing is wrong" cannot go low for a molecule with nothing
-wrong.
+which is below water at 0.465. That is the aggregation doing exactly what it
+was told — you said Lipinski compliance weighs as much as everything else — but
+it makes **the choice of `rule_sets` consequential in a way it was not before.**
+Do not request rules your chemotype cannot pass. A macrolide or PROTAC campaign
+should drop Lipinski from `rule_sets`, or weight `rule_compliance` below the
+other components, rather than burying its own series.
 
-**The fix is not weight tuning. This score orders a list; it does not filter
-one.** Remove implausible candidates before scoring, with a
-`descriptor_windows` minimum on `molecular_weight` (150–200 is usual) or a
-lower-bounded rule set. `finalize` applies windows as hard filters, so what
-reaches the scorer should already be plausible.
+Flooring the components before the log was tried as a fix and does not work.
+Measured across floors of 1e-6, 0.02, 0.05, 0.10 and 0.20, raising the floor
+lifts the rule-failing drugs but lifts water *further*, because water passes
+everything except `property_centrality` and so benefits from every floor:
 
-If you want the score itself to filter, the aggregation has to become a
-weighted *geometric* mean, so a near-zero component sinks the total instead of
-being averaged away — that puts water at ~0.20 against diazepam's ~0.91. It
-changes every score the service emits, so it is a decision to make
-deliberately, not a tweak. A test pins the current behaviour so it cannot
-change silently.
+| floor | water | erythromycin |
+|---|---|---|
+| 1e-6 | 0.465 | 0.002 |
+| 0.05 | 0.580 | 0.195 |
+| 0.20 | 0.746 | 0.416 |
+
+At no floor does a Ro5-failing real drug outrank water. So `EPSILON` is set
+just high enough to keep `ln()` finite and nothing more.
+
+### Trivially small molecules are a filtering problem, not a scoring one
+
+Water at 0.465 is still higher than it should be, and no aggregation fixes
+that: water passes three of four components because it has nothing wrong with
+it, and no combination of "nothing is wrong" concludes "this is a lead".
+Remove such molecules before scoring, with a `descriptor_windows` minimum on
+`molecular_weight` — 150 to 200 is usual — which `finalize` applies as a hard
+filter:
+
+```json
+{"config": {"descriptor_windows": {"molecular_weight": {"minimum": 150}}}}
+```
+
+```
+1 diazepam    0.912  284.7  clean
+2 caffeine    0.679  194.2  clean
+3 aspirin     0.667  180.2  phenol_ester
+4 benzene         —      —  filtered
+5 methane         —      —  filtered
+6 water           —      —  filtered
+```
 
 ## Config
 
