@@ -31,11 +31,11 @@ that specifies exactly what it must do.
 ```bash
 make install
 make test-api     # 27 passed   <- the service
-make test-chem    # 57 passed, 31 failed   <- the spec you are implementing
+make test-chem    # 81 passed, 26 failed   <- the spec you are implementing
 ```
 
-`parse.py` and `descriptors.py` are implemented (see
-[traps](#traps-worth-knowing-about)); the remaining seven modules are stubs.
+`parse.py`, `descriptors.py` and `rules.py` are implemented (see
+[traps](#traps-worth-knowing-about)); the remaining six modules are stubs.
 
 Start the server against the stubs and it behaves correctly: jobs are accepted,
 dispatched, and fail with a message naming the exact stub that stopped them.
@@ -146,7 +146,7 @@ makes the next testable:
 |---|---|---|---|
 | 1 | ~~`parse.py`~~ **done** | SMILES → sanitised, standardised mol + InChIKey | — |
 | 2 | ~~`descriptors.py`~~ **done** | MW, clogP, TPSA, HBD/HBA, RotB, Fsp3, stereo | — |
-| 3 | `rules.py` | Lipinski, Veber, Egan, Ghose, lead-like, Ro3 | **Lipinski permits one violation** — the most-mis-implemented rule in cheminformatics |
+| 3 | ~~`rules.py`~~ **done** | Lipinski, Veber, Egan, Ghose, lead-like, Ro3 | — |
 | 4 | `alerts.py` | PAINS / BRENK / NIH via RDKit `FilterCatalog` | Build each catalog **once**; rebuilding per molecule is ~10× the runtime |
 | 5 | `scaffolds.py` | Bemis–Murcko | Acyclic → `None`, not `""` |
 | 6 | `fingerprints.py` | ECFP4 + Tanimoto | ECFP**4** is radius **2**; use `BulkTanimotoSimilarity` |
@@ -186,7 +186,26 @@ Two smaller ones, both pinned by tests: `MolFromSmiles("")` returns an **empty
 `Mol`, not `None`**, and `"*"` / `"[*]"` (R-group placeholders, common in vendor
 SMILES columns) parse and sanitise cleanly, then report MW 0.
 
-A third, in `descriptors.py`: **average mass, not monoisotopic**.
+A third, in `rules.py`: **Ghose's atom count includes hydrogens.** Reading it
+as heavy atoms — easy to do, and common in the wild — inverts the filter. The
+two published criteria pin each other: a 160 Da molecule with 20 heavy atoms
+would need an average heavy-atom mass of 8 Da, lighter than carbon. Measured:
+
+| | heavy atoms | total atoms | Ghose on heavy | Ghose on total |
+|---|---|---|---|---|
+| aspirin | 13 | 21 | reject | **accept** |
+| caffeine | 14 | 24 | reject | **accept** |
+| atorvastatin | 41 | 76 | accept | **reject** |
+| erythromycin | 51 | 118 | accept | **reject** |
+
+The right-hand column is the drug-like set. This is why `descriptors.py`
+carries `total_atoms` alongside `heavy_atoms`.
+
+And of course **Lipinski permits one violation** — a strict four-of-four check
+is the classic wrong implementation. `LIPINSKI_ALLOWED_VIOLATIONS` is a named
+constant rather than a buried comparison.
+
+A fourth, in `descriptors.py`: **average mass, not monoisotopic**.
 `Descriptors.MolWt` gives 180.159 for aspirin, `ExactMolWt` gives 180.042.
 Drug-likeness rules are written against the average. And HBD/HBA use RDKit's
 refined SMARTS rather than Lipinski's literal "count all N and O", which for
@@ -202,6 +221,7 @@ Measured on this machine, per core:
 | parse + standardise, with canonical tautomer | ~780 | ~32 s |
 | parse + standardise, `canonical_tautomer=False` | ~2400 | ~11 s |
 | descriptors | ~3200 | ~8 s |
+| rules (no RDKit needed) | ~106k | <1 s |
 
 The tautomer pass costs about 3× and buys keto/enol forms of one compound
 deduplicating against each other. It is on by default.

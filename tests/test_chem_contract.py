@@ -381,6 +381,171 @@ def test_evaluate_shape_matches_schema(aspirin):
         RuleResult(**r)
 
 
+def test_lipinski_reports_violations_even_when_passing():
+    """A borderline compound must be visibly borderline, not just 'passed'."""
+    from winnow.chem.rules import lipinski
+
+    passed, violations = lipinski({"molecular_weight": 501, "clogp": 2.0, "hbd": 1, "hba": 4})
+    assert passed is True
+    assert violations == ["MW 501 > 500"]
+
+
+@pytest.mark.parametrize("mw,expected", [(499, []), (500, []), (501, ["MW 501 > 500"])])
+def test_rule_boundaries_are_inclusive(mw, expected):
+    from winnow.chem.rules import lipinski
+
+    assert lipinski({"molecular_weight": mw, "clogp": 0, "hbd": 0, "hba": 0})[1] == expected
+
+
+def test_ghose_atom_count_includes_hydrogens():
+    """Regression, and the single most consequential bug in this module.
+
+    Ghose's atom-count criterion is 20-70 TOTAL atoms, not heavy atoms. The
+    two published criteria pin each other: a 160 Da molecule with 20 heavy
+    atoms would need an average heavy-atom mass of 8 Da, lighter than carbon.
+
+    Read as heavy atoms the filter inverts - it rejects aspirin (13 heavy,
+    21 total) and accepts erythromycin (51 heavy, 118 total).
+    """
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+    from winnow.chem.rules import ghose
+
+    aspirin = compute_descriptors(parse_smiles("CC(=O)Oc1ccccc1C(=O)O"))
+    assert aspirin["heavy_atoms"] == 13
+    assert aspirin["total_atoms"] == 21
+    assert ghose(aspirin)[0] is True
+
+    erythromycin = compute_descriptors(
+        parse_smiles(
+            "CC[C@H]1OC(=O)[C@H](C)[C@@H](O[C@H]2C[C@@](C)(OC)[C@@H](O)[C@H](C)O2)"
+            "[C@H](C)[C@@H](O[C@@H]2O[C@H](C)C[C@@H]([C@H]2O)N(C)C)[C@](C)(O)"
+            "C[C@@H](C)C(=O)[C@H](C)[C@@H](O)[C@]1(C)O"
+        )
+    )
+    assert erythromycin["heavy_atoms"] == 51
+    assert erythromycin["total_atoms"] == 118
+    assert ghose(erythromycin)[0] is False
+
+
+def test_total_atoms_matches_addhs():
+    from rdkit import Chem
+
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+
+    for smiles in ["CC(=O)Oc1ccccc1C(=O)O", "c1ccccc1", "CC(C)Cc1ccc(cc1)C(C)C(=O)O"]:
+        mol = parse_smiles(smiles)
+        assert compute_descriptors(mol)["total_atoms"] == Chem.AddHs(mol).GetNumAtoms()
+
+
+@pytest.mark.parametrize(
+    ("drug", "smiles", "lipinski_passes"),
+    [
+        ("aspirin", "CC(=O)Oc1ccccc1C(=O)O", True),
+        ("ibuprofen", "CC(C)Cc1ccc(cc1)C(C)C(=O)O", True),
+        # Known Ro5 violators, which is the point of citing them.
+        (
+            "atorvastatin",
+            "CC(C)c1c(C(=O)Nc2ccccc2)c(-c2ccccc2)c(-c2ccc(F)cc2)n1CC[C@@H](O)C[C@@H](O)CC(=O)O",
+            False,
+        ),
+        (
+            "sucrose",
+            "OC[C@H]1O[C@@](CO)(O[C@H]2O[C@H](CO)[C@@H](O)[C@H](O)[C@H]2O)[C@@H](O)[C@@H]1O",
+            False,
+        ),
+    ],
+)
+def test_lipinski_agrees_with_known_drugs(drug, smiles, lipinski_passes):
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+    from winnow.chem.rules import lipinski
+
+    desc = compute_descriptors(parse_smiles(smiles))
+    assert lipinski(desc)[0] is lipinski_passes, drug
+
+
+def test_veber_and_egan_thresholds():
+    from winnow.chem.rules import egan, veber
+
+    assert veber({"rotatable_bonds": 10, "tpsa": 140})[0] is True
+    assert veber({"rotatable_bonds": 11, "tpsa": 140})[0] is False
+    assert egan({"tpsa": 131.6, "clogp": 5.88})[0] is True
+    assert egan({"tpsa": 131.6, "clogp": -1.0})[0] is True
+    assert egan({"tpsa": 131.6, "clogp": -1.01})[0] is False
+
+
+def test_fragment_rule_of_three():
+    from winnow.chem.rules import fragment
+
+    ro3 = {"molecular_weight": 300, "clogp": 3, "hbd": 3, "hba": 3, "rotatable_bonds": 3}
+    assert fragment(ro3)[0] is True
+    assert fragment({**ro3, "molecular_weight": 301})[0] is False
+
+
+def test_missing_descriptor_raises_rather_than_silently_skipping():
+    """A rule that quietly drops a constraint it cannot evaluate is worse than
+    one that fails loudly."""
+    from winnow.chem.rules import ghose
+
+    with pytest.raises(KeyError, match="total_atoms"):
+        ghose({"molecular_weight": 300, "clogp": 2.0})
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_descriptor_raises(bad):
+    """NaN compares False against every bound, so it would sail through as a
+    clean molecule. This module is meant to run over caller-supplied CSVs,
+    where NaN is entirely realistic."""
+    from winnow.chem.rules import lipinski
+
+    with pytest.raises(ValueError, match="finite"):
+        lipinski({"molecular_weight": bad, "clogp": 2.0, "hbd": 1, "hba": 4})
+
+
+def test_evaluate_collapses_duplicate_rule_sets(aspirin):
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+    from winnow.chem.rules import evaluate
+    from winnow.schemas.filters import RuleSet
+
+    desc = compute_descriptors(parse_smiles(aspirin))
+    results = evaluate(desc, [RuleSet.LIPINSKI, RuleSet.VEBER, RuleSet.LIPINSKI])
+    assert [r["name"] for r in results] == ["lipinski", "veber"]
+
+
+def test_evaluate_names_are_the_requested_enum_values(aspirin):
+    """So a client can correlate results against what it asked for."""
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+    from winnow.chem.rules import evaluate
+    from winnow.schemas.filters import RuleSet
+
+    desc = compute_descriptors(parse_smiles(aspirin))
+    requested = list(RuleSet)
+    results = evaluate(desc, requested)
+    assert [r["name"] for r in results] == [r.value for r in requested]
+
+
+def test_rules_module_imports_no_rdkit():
+    """The point of keeping rules pure: they run over a CSV of precomputed
+    properties with no chemistry toolkit installed."""
+    import ast
+    import pathlib
+
+    import winnow.chem.rules as rules_module
+
+    source = pathlib.Path(rules_module.__file__).read_text()
+    imported = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            imported.update(a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module.split(".")[0])
+    assert "rdkit" not in imported
+
+
 # --- alerts -----------------------------------------------------------------
 
 

@@ -7,7 +7,7 @@ from the connection table alone.
 One of them is nonetheless a *model*, and the distinction matters for a service
 whose whole pitch is that its numbers are defensible:
 
-  - Counts and sums - MW, heavy atoms, rings, aromatic rings, rotatable bonds,
+  - Counts and sums - MW, atom counts, rings, aromatic rings, rotatable bonds,
     Fsp3, formal charge, stereocentres - are graph arithmetic. They are exact.
   - TPSA is Ertl's additive fragment sum: a lookup table applied to the graph.
     Exact given the table.
@@ -65,6 +65,7 @@ if TYPE_CHECKING:
 DESCRIPTOR_NAMES: tuple[str, ...] = (
     "molecular_weight",
     "heavy_atoms",
+    "total_atoms",
     "clogp",
     "tpsa",
     "hbd",
@@ -98,6 +99,11 @@ def compute_descriptors(mol: Mol) -> dict[str, float | int]:
     return {
         "molecular_weight": Descriptors.MolWt(mol),
         "heavy_atoms": mol.GetNumHeavyAtoms(),
+        # Including hydrogens, which are implicit on a SMILES-derived molecule.
+        # Summing GetTotalNumHs matches Chem.AddHs(mol).GetNumAtoms() exactly
+        # and avoids copying the molecule to find out.
+        "total_atoms": mol.GetNumHeavyAtoms()
+        + sum(atom.GetTotalNumHs() for atom in mol.GetAtoms()),
         "clogp": Descriptors.MolLogP(mol),
         "tpsa": Descriptors.TPSA(mol),
         "hbd": Descriptors.NumHDonors(mol),
