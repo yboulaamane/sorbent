@@ -29,48 +29,60 @@ Components, each normalised to [0, 1] before weighting:
                        purchasing and synthesis risk rather than statements
                        about the chemistry.
 
-    score = sum(weight_i * component_i) / sum(weight_i)
+    score = exp( sum(weight_i * ln(component_i)) / sum(weight_i) )
 
-which stays in [0, 1] for any non-negative weights, since every component does.
+a weighted *geometric* mean, which stays in [0, 1] for any non-negative
+weights since every component does. Evaluated in log space rather than as
+prod(c**w)**(1/sum w), because the product underflows to 0.0 once a few
+components are small and the logs do not.
+
+Geometric, not arithmetic, and deliberately: a component near zero should sink
+the total rather than be averaged away. Under an arithmetic mean water scored
+0.821 - it passes Lipinski and Veber (both upper bounds only), trips no alert,
+and has no stereocentre or ring, so three of four components read 1.00 and the
+fourth was outvoted. Geometrically it scores 0.465, benzene 0.596, and the six
+highest-scoring molecules in a mixed test set are all real drugs.
+
+**The cost, which is real: a component of exactly zero is close to a veto.**
+``rule_compliance`` is 0.0 whenever every requested rule set fails, and with
+two rule sets it is quantised to {0, 0.5, 1}, so zero is easy to reach. Roughly
+a third of marketed oral drugs violate Ro5, and they now land at the bottom:
+
+    atorvastatin   0.0038      marketed, fails Lipinski and Veber
+    erythromycin   0.0021      marketed, fails Lipinski and Veber
+
+which is below water at 0.465. That is the aggregation doing exactly what it
+was asked to do - you told it Lipinski compliance weighs as much as everything
+else - but it means **the choice of rule_sets is now consequential in a way it
+was not before.** Do not request rules your chemotype cannot pass. A macrolide
+or a PROTAC campaign should drop Lipinski from rule_sets, or weight
+rule_compliance below the other components, rather than burying its own series.
+
+Flooring the components before the log was tried as a fix and does not work.
+Measured across floors of 1e-6, 0.02, 0.05, 0.10 and 0.20, raising the floor
+lifts the rule-failing drugs but lifts water further, because water passes
+everything except property_centrality and so benefits from every floor:
+
+    floor     water    erythromycin
+    1e-6      0.465    0.002
+    0.05      0.580    0.195
+    0.20      0.746    0.416
+
+At no floor does a Ro5-failing real drug outrank water. So EPSILON below is
+set just high enough to keep ln() finite and nothing more.
 Only the components the caller weights are computed, so the breakdown explains
 exactly the number beside it and no descriptor is demanded for a component
 nobody asked for.
 
-**Known limitation: the score has a high floor, and that floor is structural.**
-Three of the four components measure the *absence* of problems, and something
-trivially small has no problems to measure. Water passes Lipinski and Veber
-(both are upper bounds only), trips no structural alert, and has neither a
-stereocentre nor a ring - so it scores 1.00, 1.00 and 1.00 on three components
-and is rescued only by property_centrality, which at the default weight of 0.5
-out of 2.75 is 18% of the total. Measured with the default weights and the
-default rule sets:
-
-    diazepam     0.928        <- a real drug
-    ibuprofen    0.878
-    caffeine     0.840
-    benzene      0.829        <- not a lead
-    water        0.821        <- not even a molecule anyone submitted
-    aspirin      0.715
-    erythromycin 0.455
-
-Raising property_centrality to 2.0 moves water to 0.536, and adding Ghose -
-the one rule set with lower bounds - moves it to 0.700. Neither fixes it,
-because a weighted mean of "nothing is wrong" cannot go low for a molecule
-with nothing wrong.
-
-The fix is not to tune the weights. **This score orders a list; it does not
-filter one.** Anything too small or too polar to be a starting point should be
-removed before scoring, by ``descriptor_windows`` (a ``molecular_weight``
-minimum of 150-200 is the usual choice) or by requesting a rule set with lower
-bounds. ``finalize`` applies those windows as hard filters, and what reaches
+**Trivially small molecules still score higher than they should.** Water at
+0.465 is seventh in the set above, and that is not a tuning failure but a
+category error: the score orders a list, it does not filter one. Water passes
+three of four components because it has nothing wrong with it, and no
+aggregation of "nothing is wrong" can conclude "this is a lead". Anything too
+small or too polar to be a starting point should be removed before scoring,
+with a ``descriptor_windows`` minimum on ``molecular_weight`` - 150 to 200 is
+the usual choice - which ``finalize`` applies as a hard filter. What reaches
 this function is meant to be a set of plausible candidates already.
-
-If a future version wants the score itself to be the filter, the aggregation
-has to change from a weighted arithmetic mean to a weighted geometric one, so
-that a near-zero component sinks the total instead of being averaged away.
-That would put water at ~0.20 against diazepam's ~0.91. It is a deliberate
-design change affecting every score the service emits, not a tuning tweak, so
-it is not made here.
 
 The constants below are declared rather than buried because they are the
 judgement, and somebody tuning this service for a fragment campaign rather
@@ -101,6 +113,14 @@ SIGMA_TPSA = 50.0
 COMFORTABLE_RINGS = 4
 STEREO_PENALTY = 0.35
 RING_PENALTY = 0.20
+
+#: Floor applied to a component before taking its log. Only exact zeros need
+#: it - rule_compliance is 0.0 whenever every requested rule fails, and ln(0)
+#: is -inf. At 1e-6 it sits three orders of magnitude below the smallest value
+#: any component produces for a real molecule (property_centrality bottoms out
+#: near 1e-3), so it distorts nothing and merely bounds how far one component
+#: can veto the rest.
+EPSILON = 1e-6
 
 #: Every component this module knows how to compute. A weight naming anything
 #: else is a typo, and a typo that silently changed a ranking would be the
@@ -210,7 +230,14 @@ def composite_score(
     }
 
     breakdown = {name: available[name]() for name in COMPONENTS if name in weights}
-    score = sum(weights[name] * value for name, value in breakdown.items()) / total_weight
+
+    # Weighted GEOMETRIC mean, evaluated in log space. exp(sum(w*ln c)/sum w)
+    # rather than prod(c**w)**(1/sum w): the product underflows to 0.0 once a
+    # few components are small, and the logs do not.
+    log_total = sum(
+        weights[name] * math.log(max(value, EPSILON)) for name, value in breakdown.items()
+    )
+    score = math.exp(log_total / total_weight)
     # Guard against float drift at the boundaries rather than emitting
     # 1.0000000000000002 into a response model annotated as a probability-like
     # quantity.

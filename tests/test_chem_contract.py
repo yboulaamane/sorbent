@@ -1339,7 +1339,10 @@ def test_breakdown_mirrors_the_weights_exactly(aspirin):
     weights = {"rule_compliance": 2.0, "alert_penalty": 1.0}
     score, breakdown = composite_score(desc, [], 1, weights)
     assert set(breakdown) == set(weights)
-    expected = (2.0 * breakdown["rule_compliance"] + 1.0 * breakdown["alert_penalty"]) / 3.0
+    # Weighted GEOMETRIC mean, so the caller reproduces it with a product.
+    expected = (breakdown["rule_compliance"] ** 2.0 * breakdown["alert_penalty"] ** 1.0) ** (
+        1 / 3.0
+    )
     assert score == pytest.approx(expected)
 
 
@@ -1391,19 +1394,13 @@ def test_score_ranks_real_drugs_above_junk():
     assert scores["diazepam"] > scores["erythromycin"]
 
 
-def test_known_limitation_trivially_small_molecules_score_high():
-    """Pins a documented weakness so it stays visible rather than being
-    rediscovered in a report.
+def test_geometric_mean_sinks_a_near_zero_component():
+    """The reason for geometric rather than arithmetic aggregation.
 
-    Three of the four components measure the ABSENCE of problems, and water has
-    none: it passes Lipinski and Veber (upper bounds only), trips no alert, and
-    has no stereocentre or ring. Only property_centrality catches it, and at
-    the default weight that is 18% of the total.
-
-    The fix is a descriptor_windows minimum on molecular_weight, not weight
-    tuning - this score orders a list, it does not filter one. If this test
-    ever fails because the score dropped, someone changed the aggregation, and
-    the module docstring needs updating with it.
+    Water passes Lipinski and Veber (upper bounds only), trips no alert and has
+    no stereocentre or ring, so three of four components read 1.00. Under an
+    arithmetic mean the fourth was outvoted and water scored 0.821 - above
+    aspirin. Geometrically the near-zero property_centrality drags it down.
     """
     from winnow.chem.score import composite_score
 
@@ -1421,5 +1418,49 @@ def test_known_limitation_trivially_small_molecules_score_high():
         "complexity_penalty": 0.25,
     }
     score, breakdown = composite_score(water, [], 0, default_weights)
-    assert score > 0.8
     assert breakdown["property_centrality"] < 0.01
+    assert score < 0.55, "arithmetic aggregation would give 0.821 here"
+
+
+def test_composite_score_is_a_weighted_geometric_mean():
+    """Pins the aggregation itself, so a change to it is deliberate."""
+    import math
+
+    from winnow.chem.score import composite_score
+
+    desc = {"molecular_weight": 350.0, "clogp": 2.5, "tpsa": 75.0}
+    weights = {"property_centrality": 3.0, "alert_penalty": 1.0}
+    score, breakdown = composite_score(desc, [], 3, weights)
+
+    expected = math.exp(
+        (3.0 * math.log(breakdown["property_centrality"]) + math.log(breakdown["alert_penalty"]))
+        / 4.0
+    )
+    assert score == pytest.approx(expected)
+    # An arithmetic mean of the same numbers would be materially higher.
+    arithmetic = (3.0 * breakdown["property_centrality"] + breakdown["alert_penalty"]) / 4.0
+    assert score < arithmetic
+
+
+def test_zero_component_is_severe_but_not_annihilating():
+    """rule_compliance is 0.0 when every requested rule fails, and ln(0) is
+    -inf. EPSILON keeps the score finite and ordered rather than collapsing a
+    whole tier of molecules onto exactly zero.
+
+    This is a sharp edge worth knowing about: roughly a third of marketed oral
+    drugs violate Ro5, and under geometric aggregation they land near the
+    bottom. That is the aggregation doing what it was told, but it makes the
+    choice of rule_sets consequential - see the module docstring.
+    """
+    from winnow.chem.score import composite_score
+
+    desc = {"molecular_weight": 350.0, "clogp": 2.5, "tpsa": 75.0}
+    weights = {"rule_compliance": 1.0, "property_centrality": 1.0}
+
+    failed_all, _ = composite_score(desc, [{"passed": False}, {"passed": False}], 0, weights)
+    failed_half, _ = composite_score(desc, [{"passed": True}, {"passed": False}], 0, weights)
+    passed_all, _ = composite_score(desc, [{"passed": True}, {"passed": True}], 0, weights)
+
+    assert failed_all > 0.0, "must stay finite and orderable, not collapse to zero"
+    assert failed_all < failed_half < passed_all
+    assert failed_all < 0.01, "failing every requested rule is close to disqualifying"
