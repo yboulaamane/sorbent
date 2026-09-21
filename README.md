@@ -31,11 +31,11 @@ that specifies exactly what it must do.
 ```bash
 make install
 make test-api     # 27 passed   <- the service
-make test-chem    # 81 passed, 26 failed   <- the spec you are implementing
+make test-chem    # 100 passed, 23 failed  <- the spec you are implementing
 ```
 
-`parse.py`, `descriptors.py` and `rules.py` are implemented (see
-[traps](#traps-worth-knowing-about)); the remaining six modules are stubs.
+`parse.py`, `descriptors.py`, `rules.py` and `alerts.py` are implemented (see
+[traps](#traps-worth-knowing-about)); the remaining five modules are stubs.
 
 Start the server against the stubs and it behaves correctly: jobs are accepted,
 dispatched, and fail with a message naming the exact stub that stopped them.
@@ -147,7 +147,7 @@ makes the next testable:
 | 1 | ~~`parse.py`~~ **done** | SMILES → sanitised, standardised mol + InChIKey | — |
 | 2 | ~~`descriptors.py`~~ **done** | MW, clogP, TPSA, HBD/HBA, RotB, Fsp3, stereo | — |
 | 3 | ~~`rules.py`~~ **done** | Lipinski, Veber, Egan, Ghose, lead-like, Ro3 | — |
-| 4 | `alerts.py` | PAINS / BRENK / NIH via RDKit `FilterCatalog` | Build each catalog **once**; rebuilding per molecule is ~10× the runtime |
+| 4 | ~~`alerts.py`~~ **done** | PAINS / BRENK / NIH via RDKit `FilterCatalog` | — |
 | 5 | `scaffolds.py` | Bemis–Murcko | Acyclic → `None`, not `""` |
 | 6 | `fingerprints.py` | ECFP4 + Tanimoto | ECFP**4** is radius **2**; use `BulkTanimotoSimilarity` |
 | 7 | `cluster.py` | Butina | O(n²) — will not fit at 200k. Cap it, or use `LeaderPicker` |
@@ -205,7 +205,24 @@ And of course **Lipinski permits one violation** — a strict four-of-four check
 is the classic wrong implementation. `LIPINSKI_ALLOWED_VIOLATIONS` is a named
 constant rather than a buried comparison.
 
-A fourth, in `descriptors.py`: **average mass, not monoisotopic**.
+Two in `alerts.py`. **PAINS is exactly the union of PAINS_A/B/C** (480 = 16 +
+55 + 409), so requesting `[PAINS, PAINS_B]` reports catechol twice for one
+liability — and since `n_alerts` feeds `alert_penalty`, the molecule gets
+penalised twice. `find_alerts` deduplicates on (filter set, name, atoms), which
+collapses that while keeping genuinely independent flags: PAINS calls catechol
+`catechol_A(92)` and BRENK calls it `catechol`, and two catalogs agreeing is
+worth seeing. Relatedly, an entry's *name* does not name its family —
+`catechol_A(92)` belongs to `FilterSet='PAINS_B'`, the `_A` being Baell's own
+numbering — so the reported `catalog` is the entry's own family, not the one
+requested.
+
+And **`GetFilterMatches` returns one match per entry**, not every occurrence.
+Read naively, a dinitro compound reports atoms `[0,1,2]` — one nitro of two —
+so a client highlighting it shows the other as clean. `alerts.py` takes the
+SMARTS off the match and re-runs it for all occurrences, giving
+`[0,1,2,9,10,11]`. Costs ~13%, paid only when an alert actually fires.
+
+A fifth, in `descriptors.py`: **average mass, not monoisotopic**.
 `Descriptors.MolWt` gives 180.159 for aspirin, `ExactMolWt` gives 180.042.
 Drug-likeness rules are written against the average. And HBD/HBA use RDKit's
 refined SMARTS rather than Lipinski's literal "count all N and O", which for
@@ -222,6 +239,8 @@ Measured on this machine, per core:
 | parse + standardise, `canonical_tautomer=False` | ~2400 | ~11 s |
 | descriptors | ~3200 | ~8 s |
 | rules (no RDKit needed) | ~106k | <1 s |
+| alerts, PAINS + BRENK (catalogs cached) | ~1550 | ~16 s |
+| alerts, rebuilding catalogs per molecule | ~57 | ~7 min |
 
 The tautomer pass costs about 3× and buys keto/enol forms of one compound
 deduplicating against each other. It is on by default.

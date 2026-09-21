@@ -580,6 +580,128 @@ def test_known_pains_is_flagged():
         Alert(**h)
 
 
+def test_every_alert_catalog_is_mapped_and_cached():
+    from winnow.chem.alerts import get_catalog
+    from winnow.schemas.filters import AlertCatalog
+
+    for member in AlertCatalog:
+        assert get_catalog(member) is get_catalog(member), member
+
+
+def test_unmapped_catalog_raises_clearly():
+    from winnow.chem.alerts import get_catalog
+
+    with pytest.raises(KeyError, match="_RDKIT_CATALOG"):
+        get_catalog("not_a_catalog")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("name", "smiles"),
+    [
+        ("catechol", "Oc1ccccc1O"),
+        ("quinone", "O=C1C=CC(=O)C=C1"),
+        ("rhodanine", "O=C1CSC(=S)N1"),
+        ("azo dye", "c1ccc(/N=N/c2ccccc2)cc1"),
+        ("nitroaromatic", "O=[N+]([O-])c1ccccc1"),
+        ("Michael acceptor", "C=CC(=O)c1ccccc1"),
+    ],
+)
+def test_known_liabilities_are_flagged(name, smiles):
+    from winnow.chem.alerts import find_alerts
+    from winnow.chem.parse import parse_smiles
+    from winnow.schemas.filters import AlertCatalog
+    from winnow.schemas.molecule import Alert
+
+    hits = find_alerts(parse_smiles(smiles), [AlertCatalog.PAINS, AlertCatalog.BRENK])
+    assert hits, f"{name} should trip an alert"
+    for hit in hits:
+        Alert(**hit)
+
+
+@pytest.mark.parametrize("smiles", ["Cn1cnc2c1c(=O)n(C)c(=O)n2C", "CC(C)Cc1ccc(cc1)C(C)C(=O)O"])
+def test_clean_drugs_are_not_flagged(smiles):
+    """Caffeine and ibuprofen. A filter that fires on everything is useless."""
+    from winnow.chem.alerts import find_alerts
+    from winnow.chem.parse import parse_smiles
+    from winnow.schemas.filters import AlertCatalog
+
+    assert find_alerts(parse_smiles(smiles), [AlertCatalog.PAINS, AlertCatalog.BRENK]) == []
+
+
+def test_overlapping_catalog_requests_do_not_double_count():
+    """PAINS is exactly PAINS_A + PAINS_B + PAINS_C (480 = 16 + 55 + 409), so
+    requesting PAINS and PAINS_B together would report catechol twice - and
+    n_alerts feeds alert_penalty, so the molecule would be penalised twice for
+    one liability."""
+    from winnow.chem.alerts import find_alerts
+    from winnow.chem.parse import parse_smiles
+    from winnow.schemas.filters import AlertCatalog as AC
+
+    mol = parse_smiles("Oc1ccccc1O")
+    alone = find_alerts(mol, [AC.PAINS])
+    assert len(alone) == 1
+    assert len(find_alerts(mol, [AC.PAINS, AC.PAINS_B])) == 1
+    assert len(find_alerts(mol, [AC.PAINS, AC.PAINS_A, AC.PAINS_B, AC.PAINS_C])) == 1
+
+
+def test_independent_catalogs_agreeing_are_both_reported():
+    """PAINS calls it catechol_A(92), BRENK calls it catechol. Two catalogs
+    agreeing is worth seeing, and must not be collapsed like the overlap above.
+    """
+    from winnow.chem.alerts import find_alerts
+    from winnow.chem.parse import parse_smiles
+    from winnow.schemas.filters import AlertCatalog as AC
+
+    hits = find_alerts(parse_smiles("Oc1ccccc1O"), [AC.PAINS, AC.BRENK, AC.NIH])
+    assert {h["catalog"] for h in hits} == {"PAINS_B", "Brenk", "NIH"}
+
+
+def test_catalog_field_is_the_entrys_family_not_the_request():
+    """The PAINS alert catechol_A(92) belongs to FilterSet PAINS_B - the _A is
+    Baell's own numbering, not the family letter. Reporting the requested
+    catalog would lose that, and reporting the name's letter would be wrong."""
+    from winnow.chem.alerts import find_alerts
+    from winnow.chem.parse import parse_smiles
+    from winnow.schemas.filters import AlertCatalog
+
+    (hit,) = find_alerts(parse_smiles("Oc1ccccc1O"), [AlertCatalog.PAINS])
+    assert hit["name"] == "catechol_A(92)"
+    assert hit["catalog"] == "PAINS_B"
+
+
+def test_atom_indices_cover_every_occurrence():
+    """GetFilterMatches returns ONE match per entry, so a naive read reports
+    only the first nitro of a dinitro compound - a client would highlight one
+    and leave the other looking clean."""
+    from winnow.chem.alerts import find_alerts
+    from winnow.chem.parse import parse_smiles
+    from winnow.schemas.filters import AlertCatalog
+
+    mol = parse_smiles("O=[N+]([O-])c1ccc(cc1)[N+](=O)[O-]")
+    nitro = next(h for h in find_alerts(mol, [AlertCatalog.BRENK]) if h["name"] == "nitro_group")
+    assert nitro["atom_indices"] == [0, 1, 2, 9, 10, 11]
+
+
+def test_atom_indices_are_valid_indices_into_the_molecule():
+    from winnow.chem.alerts import find_alerts
+    from winnow.chem.parse import parse_smiles
+    from winnow.schemas.filters import AlertCatalog as AC
+
+    for smiles in ["Oc1ccccc1O", "O=C1CSC(=S)N1", "Clc1ccc(Cl)c(Cl)c1Cl"]:
+        mol = parse_smiles(smiles)
+        for hit in find_alerts(mol, [AC.PAINS, AC.BRENK, AC.NIH, AC.ZINC]):
+            assert hit["atom_indices"], hit["name"]
+            assert all(0 <= i < mol.GetNumAtoms() for i in hit["atom_indices"])
+            assert hit["atom_indices"] == sorted(set(hit["atom_indices"]))
+
+
+def test_no_catalogs_requested_returns_nothing():
+    from winnow.chem.alerts import find_alerts
+    from winnow.chem.parse import parse_smiles
+
+    assert find_alerts(parse_smiles("Oc1ccccc1O"), []) == []
+
+
 # --- scaffolds --------------------------------------------------------------
 
 
