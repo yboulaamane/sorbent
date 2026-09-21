@@ -1442,6 +1442,106 @@ def test_composite_score_is_a_weighted_geometric_mean():
     assert score < arithmetic
 
 
+def test_config_defaults_are_isolated_between_instances():
+    """TriageConfig uses mutable `default=` rather than default_factory, so
+    that the defaults appear in the generated OpenAPI schema. Pydantic v2
+    deep-copies them per instance; this pins that it keeps doing so."""
+    from winnow.schemas.filters import RuleSet, TriageConfig
+
+    first = TriageConfig()
+    first.rule_sets.append(RuleSet.EGAN)
+    first.score_weights["bogus"] = 1.0
+    first.descriptor_windows["molecular_weight"] = None  # type: ignore[assignment]
+
+    second = TriageConfig()
+    assert second.rule_sets == [RuleSet.VEBER]
+    assert "bogus" not in second.score_weights
+    assert second.descriptor_windows == {}
+
+
+def test_config_defaults_are_visible_in_the_openapi_schema():
+    """default_factory does not serialise into JSON Schema, so the API docs
+    would advertise no defaults at all."""
+    from winnow.schemas.filters import TriageConfig
+
+    properties = TriageConfig.model_json_schema()["properties"]
+    assert properties["rule_sets"]["default"] == ["veber"]
+    assert properties["alert_catalogs"]["default"] == ["pains", "brenk"]
+    assert "rule_compliance" in properties["score_weights"]["default"]
+
+
+def test_default_rule_sets_exclude_lipinski():
+    """Ro5 is opt-in, not a default.
+
+    Under geometric aggregation, failing every requested rule set is close to
+    disqualifying, and roughly a third of marketed oral drugs violate Ro5 -
+    including every macrolide and most peptidomimetics. Requesting it by
+    default would bury whole legitimate series.
+    """
+    from winnow.schemas.filters import RuleSet, TriageConfig
+
+    assert TriageConfig().rule_sets == [RuleSet.VEBER]
+    assert RuleSet.LIPINSKI not in TriageConfig().rule_sets
+
+
+def test_trimming_rule_sets_does_not_rescue_a_molecule_that_fails_the_rest():
+    """rule_compliance is a fraction, so 0/2 and 0/1 are both 0.0.
+
+    Dropping a rule set only helps a molecule that PASSED it. What lifts a
+    molecule failing everything is removing the component - either
+    rule_sets=[] or leaving rule_compliance out of score_weights.
+    """
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+    from winnow.chem.rules import evaluate
+    from winnow.chem.score import composite_score
+    from winnow.schemas.filters import RuleSet, TriageConfig
+
+    weights = TriageConfig().score_weights
+    erythromycin = compute_descriptors(
+        parse_smiles(
+            "CC[C@H]1OC(=O)[C@H](C)[C@@H](O[C@H]2C[C@@](C)(OC)[C@@H](O)[C@H](C)O2)"
+            "[C@H](C)[C@@H](O[C@@H]2O[C@H](C)C[C@@H]([C@H]2O)N(C)C)[C@](C)(O)"
+            "C[C@@H](C)C(=O)[C@H](C)[C@@H](O)[C@]1(C)O"
+        )
+    )
+
+    def score_with(rule_sets, score_weights=weights):
+        rules = evaluate(erythromycin, rule_sets)
+        return composite_score(erythromycin, rules, 0, score_weights)[0]
+
+    both = score_with([RuleSet.LIPINSKI, RuleSet.VEBER])
+    trimmed = score_with([RuleSet.VEBER])
+    assert trimmed == pytest.approx(both), "trimming the list changes nothing"
+
+    # Removing the component does lift it, by two orders of magnitude.
+    assert score_with([]) > 100 * both
+    without_component = {k: v for k, v in weights.items() if k != "rule_compliance"}
+    assert score_with([RuleSet.VEBER], without_component) > 50 * both
+
+
+def test_a_single_rule_set_removes_partial_credit():
+    """With one rule set rule_compliance is binary {0, 1}. A molecule failing
+    by a hair loses the 0.5 it would have earned from a second rule set."""
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+    from winnow.chem.rules import evaluate
+    from winnow.chem.score import composite_score
+    from winnow.schemas.filters import RuleSet, TriageConfig
+
+    weights = TriageConfig().score_weights
+    # Passes Lipinski, fails Veber on TPSA 142.7 against a limit of 140.
+    borderline = compute_descriptors(parse_smiles("CC(C)CC(=O)NCC(=O)NCC(=O)NCC(=O)NCC(=O)OC"))
+    two = composite_score(
+        borderline, evaluate(borderline, [RuleSet.LIPINSKI, RuleSet.VEBER]), 0, weights
+    )[0]
+    one = composite_score(borderline, evaluate(borderline, [RuleSet.VEBER]), 0, weights)[0]
+
+    assert two > 0.3
+    assert one < 0.01
+    assert two > 50 * one
+
+
 def test_zero_component_is_severe_but_not_annihilating():
     """rule_compliance is 0.0 when every requested rule fails, and ln(0) is
     -inf. EPSILON keeps the score finite and ordered rather than collapsing a

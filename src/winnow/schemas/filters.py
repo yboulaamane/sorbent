@@ -66,22 +66,24 @@ class TriageConfig(BaseModel):
 
     # --- hard filters -------------------------------------------------------
     rule_sets: list[RuleSet] = Field(
-        default_factory=lambda: [RuleSet.LIPINSKI, RuleSet.VEBER],
+        default=[RuleSet.VEBER],
         description="Evaluated and reported for every molecule. Whether a "
-        "failure removes the molecule is controlled by drop_rule_failures.",
+        "failure removes the molecule is controlled by drop_rule_failures. "
+        "Lipinski is deliberately NOT a default: the composite score "
+        "aggregates geometrically, so failing every requested rule set is "
+        "close to disqualifying, and roughly a third of marketed oral drugs "
+        "violate Ro5. Request it explicitly when it suits the chemotype.",
     )
     drop_rule_failures: bool = False
 
     descriptor_windows: dict[str, DescriptorWindow] = Field(
-        default_factory=dict,
+        default={},
         description="Keyed by a field name of Descriptors, e.g. "
         '{"molecular_weight": {"minimum": 250, "maximum": 500}}. '
         "A molecule outside any window is always dropped.",
     )
 
-    alert_catalogs: list[AlertCatalog] = Field(
-        default_factory=lambda: [AlertCatalog.PAINS, AlertCatalog.BRENK]
-    )
+    alert_catalogs: list[AlertCatalog] = Field(default=[AlertCatalog.PAINS, AlertCatalog.BRENK])
     drop_alert_hits: bool = Field(
         default=False,
         description="False by default on purpose: PAINS matches are a reason "
@@ -111,7 +113,7 @@ class TriageConfig(BaseModel):
     )
 
     score_weights: dict[str, float] = Field(
-        default_factory=lambda: {
+        default={
             "rule_compliance": 1.0,
             "alert_penalty": 1.0,
             "property_centrality": 0.5,
