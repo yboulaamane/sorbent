@@ -18,11 +18,11 @@ from winnow.jobs.store import JobStore
 
 
 def get_store(request: Request) -> JobStore:
-    return request.app.state.store  # type: ignore[no-any-return]
+    return request.app.state.store
 
 
 def get_runner(request: Request) -> TriageRunner:
-    return request.app.state.runner  # type: ignore[no-any-return]
+    return request.app.state.runner
 
 
 def get_request_settings(request: Request) -> Settings:

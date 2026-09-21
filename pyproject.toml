@@ -7,7 +7,7 @@ name = "winnow"
 version = "0.1.0"
 description = "A compound triage service: submit a SMILES library, get back a ranked, deduplicated, liability-flagged shortlist."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [{ name = "Yassir" }]
 
@@ -48,7 +48,7 @@ markers = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ANN"]
@@ -58,6 +58,17 @@ ignore = ["ANN401"]
 "tests/*" = ["ANN"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 ignore_missing_imports = true
 strict_optional = true
+warn_unused_ignores = true
+
+# RDKit ships no py.typed marker, and much of it is Boost.Python bindings plus
+# modules that build their attributes dynamically at import (Descriptors.MolWt
+# and friends exist at runtime but not in the source text). Following it
+# produces a stream of false attr-defined errors on functions that demonstrably
+# work. Treat the package as untyped, which is what it is.
+[[tool.mypy.overrides]]
+module = ["rdkit.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true

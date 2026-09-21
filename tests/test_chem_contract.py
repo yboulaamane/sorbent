@@ -216,6 +216,121 @@ def test_unassigned_stereocentres_are_counted():
     assert undefined["unassigned_stereocentres"] == 1
 
 
+@pytest.mark.parametrize(
+    ("smiles", "total", "unassigned"),
+    [
+        ("C[C@H](O)[C@@H](N)C(=O)O", 2, 0),  # both defined
+        ("C[C@H](O)C(N)C(=O)O", 2, 1),  # one of two defined
+        ("CC(O)C(N)C(=O)O", 2, 2),  # neither
+        ("CCCCO", 0, 0),  # no centres at all
+    ],
+)
+def test_partial_stereo_assignment_is_counted_correctly(smiles, total, unassigned):
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+
+    desc = compute_descriptors(parse_smiles(smiles))
+    assert desc["stereocentres"] == total
+    assert desc["unassigned_stereocentres"] == unassigned
+
+
+def test_double_bond_geometry_is_not_counted_as_a_stereocentre():
+    """Documents a known limitation rather than asserting it is correct.
+
+    FindMolChiralCenters sees atoms only, so an undefined E/Z alkene is not
+    flagged even though it is the same purchasing problem. If this test ever
+    starts failing, someone has moved to FindPotentialStereo - update the
+    Descriptors schema to match.
+    """
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+
+    assert compute_descriptors(parse_smiles("CC=CC(=O)O"))["unassigned_stereocentres"] == 0
+
+
+@pytest.mark.parametrize(
+    ("name", "smiles", "mw"),
+    [
+        ("caffeine", "Cn1cnc2c1c(=O)n(C)c(=O)n2C", 194.19),
+        ("ibuprofen", "CC(C)Cc1ccc(cc1)C(C)C(=O)O", 206.29),
+        ("paracetamol", "CC(=O)Nc1ccc(O)cc1", 151.16),
+        ("nicotine", "CN1CCC[C@H]1c1cccnc1", 162.24),
+    ],
+)
+def test_molecular_weight_matches_literature(name, smiles, mw):
+    """Average mass, not monoisotopic - ExactMolWt would fail every one."""
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+
+    desc = compute_descriptors(parse_smiles(smiles))
+    assert desc["molecular_weight"] == pytest.approx(mw, abs=0.05)
+
+
+def test_counts_are_python_ints_not_floats():
+    """Pydantic declares these as int. A numpy scalar or a float would either
+    fail validation or serialise as 13.0, and only show up in production."""
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+
+    desc = compute_descriptors(parse_smiles("CC(=O)Oc1ccccc1C(=O)O"))
+    integral = (
+        "heavy_atoms",
+        "hbd",
+        "hba",
+        "rotatable_bonds",
+        "aromatic_rings",
+        "rings",
+        "formal_charge",
+        "stereocentres",
+        "unassigned_stereocentres",
+    )
+    for key in integral:
+        assert type(desc[key]) is int, f"{key} is {type(desc[key]).__name__}"
+    for key in ("molecular_weight", "clogp", "tpsa", "fraction_csp3"):
+        assert type(desc[key]) is float, f"{key} is {type(desc[key]).__name__}"
+
+
+def test_formal_charge_is_reported():
+    from rdkit import Chem
+
+    from winnow.chem.descriptors import compute_descriptors
+
+    # Not via parse_smiles: standardisation would neutralise it.
+    assert compute_descriptors(Chem.MolFromSmiles("CC(=O)[O-]"))["formal_charge"] == -1
+    assert compute_descriptors(Chem.MolFromSmiles("C[NH3+]"))["formal_charge"] == 1
+
+
+@pytest.mark.parametrize(
+    "smiles",
+    [
+        "O",  # no carbon at all - Fsp3 must not divide by zero
+        "OB(O)c1ccccc1",  # boron
+        "N.N.Cl[Pt]Cl",  # cisplatin - Crippen has no Pt parameter
+        "C[Se]C",  # selenium
+        "C[Si](C)(C)C",  # silicon
+        "[13CH4]",  # isotope
+        "C[CH2]",  # radical
+        "*c1ccccc1",  # attachment point
+    ],
+)
+def test_awkward_chemistry_does_not_raise(smiles):
+    """A vendor library contains all of these. None may kill a chunk."""
+    from rdkit import Chem
+
+    from winnow.chem.descriptors import DESCRIPTOR_NAMES, compute_descriptors
+
+    desc = compute_descriptors(Chem.MolFromSmiles(smiles))
+    assert set(desc) == set(DESCRIPTOR_NAMES)
+
+
+def test_carbon_free_molecule_has_zero_fsp3():
+    from rdkit import Chem
+
+    from winnow.chem.descriptors import compute_descriptors
+
+    assert compute_descriptors(Chem.MolFromSmiles("O"))["fraction_csp3"] == 0.0
+
+
 # --- rules ------------------------------------------------------------------
 
 

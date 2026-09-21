@@ -44,9 +44,7 @@ if TYPE_CHECKING:
 
 # RDKit writes parse failures straight to stderr. A vendor file with 3% junk
 # would otherwise bury the application log under a quarter of a million lines.
-# The ignore below is a mypy misread of a Boost.Python binding: rdkit ships no
-# py.typed, and DisableLog is demonstrably present at runtime.
-RDLogger.DisableLog("rdApp.*")  # type: ignore[attr-defined]
+RDLogger.DisableLog("rdApp.*")
 
 #: Longest input echoed back in an error message. Garbage input is sometimes a
 #: whole mangled spreadsheet row, and it should not end up in the response.
@@ -73,9 +71,7 @@ def _echo(smiles: str) -> str:
 def _cleanup_params() -> Any:
     params = rdMolStandardize.CleanupParameters()
     # See the module docstring. Without this, stereo silently disappears.
-    # The ignore is a mypy misread of a Boost.Python property, not a real
-    # type error - the assignment demonstrably takes effect at runtime.
-    params.tautomerRemoveSp3Stereo = False  # type: ignore[assignment]
+    params.tautomerRemoveSp3Stereo = False
     return params
 
 
