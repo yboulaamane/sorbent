@@ -1467,7 +1467,77 @@ def test_config_defaults_are_visible_in_the_openapi_schema():
     properties = TriageConfig.model_json_schema()["properties"]
     assert properties["rule_sets"]["default"] == ["veber"]
     assert properties["alert_catalogs"]["default"] == ["pains", "brenk"]
-    assert "rule_compliance" in properties["score_weights"]["default"]
+    assert "property_centrality" in properties["score_weights"]["default"]
+    assert "rule_compliance" not in properties["score_weights"]["default"]
+
+
+def test_default_score_weights_exclude_rule_compliance():
+    """Rules are reported, not ranked on.
+
+    The score aggregates geometrically, so a component of zero is close to a
+    veto, and rule_compliance is zero whenever every requested rule set fails.
+    Weighting it by default buried marketed drugs: atorvastatin scored 0.0038
+    and erythromycin 0.0021, below water. Without it they score 0.418 and
+    0.172, and trivially small molecules drop too, because passing rules they
+    cannot fail no longer earns them a free 1.00.
+    """
+    from winnow.schemas.filters import TriageConfig
+
+    weights = TriageConfig().score_weights
+    assert "rule_compliance" not in weights
+    assert set(weights) == {"alert_penalty", "property_centrality", "complexity_penalty"}
+
+
+def test_rules_are_still_evaluated_and_reported_by_default():
+    """Dropping the weight must not drop the evidence - a chemist still needs
+    to see which rules a molecule broke and by how much."""
+    from winnow.chem.pipeline import finalize, process_chunk
+    from winnow.schemas.filters import TriageConfig
+
+    config = TriageConfig()
+    records = [
+        (
+            "erythromycin",
+            "CC[C@H]1OC(=O)[C@H](C)[C@@H](O[C@H]2C[C@@](C)(OC)"
+            "[C@@H](O)[C@H](C)O2)[C@H](C)[C@@H](O[C@@H]2O[C@H](C)C[C@@H]([C@H]2O)"
+            "N(C)C)[C@](C)(O)C[C@@H](C)C(=O)[C@H](C)[C@@H](O)[C@]1(C)O",
+        )
+    ]
+    molecules, _ = finalize(process_chunk(records, config.model_dump(mode="json")), config)
+
+    (result,) = molecules
+    assert result["rules"], "rule results must still be reported"
+    assert result["rules"][0]["name"] == "veber"
+    assert result["rules"][0]["passed"] is False
+    assert result["rules"][0]["violations"]
+    # ...but they no longer veto the ranking.
+    assert result["score"] > 0.1
+
+
+def test_dropping_the_component_lifts_rule_failing_drugs_and_lowers_trivia():
+    """The measured reason for the default. Both effects at once."""
+    from winnow.chem.descriptors import compute_descriptors
+    from winnow.chem.parse import parse_smiles
+    from winnow.chem.rules import evaluate
+    from winnow.chem.score import composite_score
+    from winnow.schemas.filters import RuleSet, TriageConfig
+
+    without = TriageConfig().score_weights
+    with_it = dict(without, rule_compliance=1.0)
+
+    def score(smiles, weights):
+        desc = compute_descriptors(parse_smiles(smiles))
+        return composite_score(desc, evaluate(desc, [RuleSet.VEBER]), 0, weights)[0]
+
+    atorvastatin = (
+        "CC(C)c1c(C(=O)Nc2ccccc2)c(-c2ccccc2)c(-c2ccc(F)cc2)n1CC[C@@H](O)C[C@@H](O)CC(=O)O"
+    )
+    # A marketed drug that fails Veber stops being buried.
+    assert score(atorvastatin, with_it) < 0.01
+    assert score(atorvastatin, without) > 0.4
+
+    # And water stops being rewarded for passing a rule it cannot fail.
+    assert score("O", without) < score("O", with_it)
 
 
 def test_default_rule_sets_exclude_lipinski():
@@ -1485,7 +1555,8 @@ def test_default_rule_sets_exclude_lipinski():
 
 
 def test_trimming_rule_sets_does_not_rescue_a_molecule_that_fails_the_rest():
-    """rule_compliance is a fraction, so 0/2 and 0/1 are both 0.0.
+    """Only relevant when rule_compliance is weighted, which by default it is
+    not. rule_compliance is a fraction, so 0/2 and 0/1 are both 0.0.
 
     Dropping a rule set only helps a molecule that PASSED it. What lifts a
     molecule failing everything is removing the component - either
@@ -1497,7 +1568,9 @@ def test_trimming_rule_sets_does_not_rescue_a_molecule_that_fails_the_rest():
     from winnow.chem.score import composite_score
     from winnow.schemas.filters import RuleSet, TriageConfig
 
-    weights = TriageConfig().score_weights
+    # Not the default weights - rule_compliance is no longer in them. This
+    # pins what happens to a caller who puts it back.
+    weights = dict(TriageConfig().score_weights, rule_compliance=1.0)
     erythromycin = compute_descriptors(
         parse_smiles(
             "CC[C@H]1OC(=O)[C@H](C)[C@@H](O[C@H]2C[C@@](C)(OC)[C@@H](O)[C@H](C)O2)"
@@ -1521,15 +1594,16 @@ def test_trimming_rule_sets_does_not_rescue_a_molecule_that_fails_the_rest():
 
 
 def test_a_single_rule_set_removes_partial_credit():
-    """With one rule set rule_compliance is binary {0, 1}. A molecule failing
-    by a hair loses the 0.5 it would have earned from a second rule set."""
+    """Only relevant when rule_compliance is weighted, which by default it is
+    not. With one rule set rule_compliance is binary {0, 1}, so a molecule
+    failing by a hair loses the 0.5 a second rule set would have earned it."""
     from winnow.chem.descriptors import compute_descriptors
     from winnow.chem.parse import parse_smiles
     from winnow.chem.rules import evaluate
     from winnow.chem.score import composite_score
     from winnow.schemas.filters import RuleSet, TriageConfig
 
-    weights = TriageConfig().score_weights
+    weights = dict(TriageConfig().score_weights, rule_compliance=1.0)
     # Passes Lipinski, fails Veber on TPSA 142.7 against a limit of 140.
     borderline = compute_descriptors(parse_smiles("CC(C)CC(=O)NCC(=O)NCC(=O)NCC(=O)NCC(=O)OC"))
     two = composite_score(
