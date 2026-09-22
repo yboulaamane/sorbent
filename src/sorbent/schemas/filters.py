@@ -114,8 +114,8 @@ class TriageConfig(BaseModel):
 
     score_weights: dict[str, float] = Field(
         default={
-            "alert_penalty": 1.0,
-            "property_centrality": 0.5,
+            "property_centrality": 1.0,
+            "alert_penalty": 0.5,
             "complexity_penalty": 0.25,
         },
         description="Weights for the composite score. See chem/score.py. "

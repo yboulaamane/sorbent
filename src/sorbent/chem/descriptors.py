@@ -28,15 +28,27 @@ aspirin; ``ExactMolWt`` gives 180.042. Drug-likeness rules are written against
 the average mass, so that is what ``molecular_weight`` holds. Anyone comparing
 against an MS result wants the other one.
 
-**HBD/HBA follow RDKit's SMARTS, not Lipinski's literal wording.** The 1997
-paper counts donors as "OH plus NH" and acceptors as "all N and O" - which for
-aspirin is 4 acceptors. ``Descriptors.NumHAcceptors`` applies a refined pattern
-that excludes, among others, the ester and amide oxygens that cannot really
-accept, and gives 3. RDKit's definition is the more chemically sensible one and
-is what most software reports, so it is what we use - but a borderline compound
-can pass here and fail against a tool using the literal N+O count. The
-equivalents, if you ever need them, are ``Lipinski.NHOHCount`` and
-``Lipinski.NOCount``.
+**HBA is Lipinski's literal N+O count; HBD is RDKit's refined pattern.** The
+two are not treated the same way, and the reason is measurement rather than
+taste. Checked against Molport's own published descriptors for 206,922
+peptidomimetics:
+
+    HBA   Lipinski.NOCount, the 1997 paper's "all N and O"   97.5% agreement
+    HBA   Descriptors.NumHAcceptors, RDKit's refined SMARTS  11.1% agreement
+    HBD   Descriptors.NumHDonors                             95.6% agreement
+    HBD   Lipinski.NHOHCount, the paper's "OH plus NH"       91.5% agreement
+
+So each field uses whichever definition the rest of the field actually uses.
+The HBA gap is not marginal: RDKit's refined pattern excludes amide nitrogens,
+and a library of amide isosteres is made of them, which put the median
+disagreement at two acceptors per compound. A rule that cites Lipinski 1997
+should count acceptors the way Lipinski 1997 did.
+
+**TPSA includes sulphur and phosphorus.** RDKit excludes them by default;
+Ertl's published table includes them, and so does Molport. Agreement goes from
+58.4% to 85.0% with ``includeSandP=True``, and it changes the Veber verdict for
+0.62% of compounds - almost all molecules have no S or P at all, so the two
+definitions agree exactly wherever it cannot matter.
 
 **Crippen logP is parameterised for organic elements.** It does not raise on a
 metal complex - cisplatin quietly returns 1.70 - so a logP on anything
@@ -55,7 +67,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from rdkit import Chem
-from rdkit.Chem import Descriptors, rdMolDescriptors
+from rdkit.Chem import Descriptors, Lipinski, rdMolDescriptors
 
 if TYPE_CHECKING:
     from rdkit.Chem import Mol
@@ -105,9 +117,9 @@ def compute_descriptors(mol: Mol) -> dict[str, float | int]:
         "total_atoms": mol.GetNumHeavyAtoms()
         + sum(atom.GetTotalNumHs() for atom in mol.GetAtoms()),
         "clogp": Descriptors.MolLogP(mol),
-        "tpsa": Descriptors.TPSA(mol),
+        "tpsa": Descriptors.TPSA(mol, includeSandP=True),
         "hbd": Descriptors.NumHDonors(mol),
-        "hba": Descriptors.NumHAcceptors(mol),
+        "hba": Lipinski.NOCount(mol),
         "rotatable_bonds": Descriptors.NumRotatableBonds(mol),
         "aromatic_rings": rdMolDescriptors.CalcNumAromaticRings(mol),
         "rings": rdMolDescriptors.CalcNumRings(mol),

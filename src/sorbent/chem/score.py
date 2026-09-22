@@ -50,19 +50,23 @@ many rule sets were asked for - two give {0, 0.5, 1}, one gives {0, 1} with no
 middle ground. Weighted, that buried marketed drugs:
 
                         weighted    unweighted (the default)
-    atorvastatin          0.0038        0.4176
-    erythromycin          0.0021        0.1717
-    ciclosporin           0.0004        0.0130
-    peptoid, TPSA 142.7   0.0033        0.3345
-    water                 0.4652        0.3004
-    benzene               0.5956        0.4429
+    diazepam              0.8318        0.7487
+    aspirin               0.7357        0.6174
+    atorvastatin          0.0022        0.1744
+    erythromycin          0.0007        0.0295
+    benzene               0.3547        0.1962
+    water                 0.2164        0.0902
 
-Note that it cuts both ways. Dropping the component lifts molecules that fail
-their rules, and *lowers* trivially small ones - water and benzene were being
-handed a free 1.00 for passing rules they cannot fail. Roughly a third of
-marketed oral drugs violate Ro5, every macrolide does, and most
-peptidomimetics fail Veber on TPSA or rotatable bonds; none of them should be
-ranked below water.
+It cuts both ways. Dropping the component lifts molecules that fail their
+rules, and *lowers* trivially small ones - water and benzene were being handed
+a free 1.00 for passing rules they cannot fail. Roughly a third of marketed
+oral drugs violate Ro5 and every macrolide does; none of them belong below
+water.
+
+Note what this does NOT rest on. An earlier version of this file argued that
+most peptidomimetics fail Veber on TPSA or rotatable bonds. Measured over
+206,922 of them, 96.9% pass. The default is right; that reasoning for it was
+not.
 
 **Rule results are still computed and reported on every molecule.** Dropping
 the weight drops the ranking influence, not the evidence: a chemist still sees
@@ -92,15 +96,31 @@ Only the components the caller weights are computed, so the breakdown explains
 exactly the number beside it and no descriptor is demanded for a component
 nobody asked for.
 
-**Trivially small molecules still score higher than they should.** Water at
-0.465 is seventh in the set above, and that is not a tuning failure but a
-category error: the score orders a list, it does not filter one. Water passes
-three of four components because it has nothing wrong with it, and no
-aggregation of "nothing is wrong" can conclude "this is a lead". Anything too
-small or too polar to be a starting point should be removed before scoring,
-with a ``descriptor_windows`` minimum on ``molecular_weight`` - 150 to 200 is
-the usual choice - which ``finalize`` applies as a hard filter. What reaches
-this function is meant to be a set of plausible candidates already.
+**property_centrality carries the weight, because it is the only component
+that discriminates.** Measured over 15,000 real compounds:
+
+                          p10     p25  median     p75     p90   at 1.00
+    property_centrality  0.426   0.639   0.799   0.900   0.955     0.1%
+    alert_penalty        0.500   1.000   1.000   1.000   1.000    87.7%
+    complexity_penalty   0.741   0.741   1.000   1.000   1.000    59.1%
+
+Two of the three sit at 1.00 for most molecules and contribute nothing except
+to inflate sum(w), which shrinks the exponent on the one component that does
+vary. Underweighted at 0.5 of 1.75, the score collapsed to centrality**0.286
+and put 53.5% of a 206,922-compound library above 0.90 - not wrong, but
+unreadable, and impossible to threshold on.
+
+Weighting centrality above the other two together also fixed something
+flooring could not: water fell from 0.465 to 0.090, below atorvastatin at
+0.174. Be clear about what that did and did not change, though - the reordering
+is small. Spearman against the old weights is 0.971 and the top hundred is
+identical. This makes the number legible; it does not materially change who
+comes first.
+
+Trivially small molecules are still best removed before scoring rather than
+ranked low, with a ``descriptor_windows`` minimum on ``molecular_weight``
+around 150-200, which ``finalize`` applies as a hard filter. The score orders a
+list; it does not filter one.
 
 The constants below are declared rather than buried because they are the
 judgement, and somebody tuning this service for a fragment campaign rather
@@ -111,6 +131,9 @@ from __future__ import annotations
 
 import math
 
+#: Weights live in TriageConfig.score_weights, not here; these are the targets
+#: the centrality component measures distance from.
+#:
 #: Targets for property_centrality. Lead-like, deliberately: Teague's argument
 #: is that screening hits grow during optimisation, so a good starting point
 #: sits below the Lipinski ceiling rather than against it.
