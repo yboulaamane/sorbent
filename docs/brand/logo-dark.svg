@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 112" width="440" height="112" role="img" aria-label="Sorbent — compound triage">
+  <g transform="translate(18 6) scale(1.56)">
+  <defs>
+    <clipPath id="lane-dark">
+      <rect x="25" y="4" width="14" height="56" rx="3"/>
+    </clipPath>
+    <linearGradient id="held-dark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#E0A83C" stop-opacity="0.32"/>
+      <stop offset="30%"  stop-color="#E0A83C" stop-opacity="1"/>
+      <stop offset="70%"  stop-color="#E0A83C" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#E0A83C" stop-opacity="0.32"/>
+    </linearGradient>
+  </defs>
+  <rect x="25" y="4" width="14" height="56" rx="3" fill="#E6EDF3" fill-opacity="0.05"/>
+  <g clip-path="url(#lane-dark)">
+    <rect x="25" y="12.5" width="14" height="8" fill="url(#held-dark)"/>
+    <rect x="25" y="31" width="14" height="5.5" fill="#E6EDF3" fill-opacity="0.30"/>
+    <rect x="25" y="45" width="14" height="4" fill="#E6EDF3" fill-opacity="0.15"/>
+  </g>
+  <rect x="25" y="4" width="14" height="56" rx="3" fill="none" stroke="#E6EDF3A0" stroke-width="0.9"/>
+  </g>
+  <text x="128" y="60" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="37" font-weight="300"
+        letter-spacing="1.9" fill="#E6EDF3">Sorbent</text>
+  <text x="131" y="82" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="500"
+        letter-spacing="3.8" fill="#8B949E">COMPOUND TRIAGE</text>
+</svg>

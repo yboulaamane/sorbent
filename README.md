@@ -1,10 +1,19 @@
-# Sorbent
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo-dark.svg">
+    <img alt="Sorbent — compound triage" src="docs/brand/logo-light.svg" width="360">
+  </picture>
+</p>
+
+<p align="center">
+  <em>A sorbent is the phase that holds on to what you are after<br>
+  while the rest of the mixture flows past.</em>
+</p>
+
+---
 
 **A compound triage service.** Submit a SMILES library, get back a ranked,
 deduplicated, liability-flagged shortlist.
-
-*A sorbent is the phase that holds on to what you are after while the rest of
-the mixture flows past.*
 
 Everything Sorbent reports is **deterministic and citable**. Descriptors come
 from RDKit, the rule sets are the published literature definitions, the
