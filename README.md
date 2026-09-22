@@ -351,8 +351,15 @@ Geometric rather than arithmetic, deliberately: a component near zero should
 sink the total rather than be averaged away. Under an arithmetic mean water
 scored **0.821** — it passes Lipinski and Veber (both upper bounds only), trips
 no alert and has no stereocentre or ring, so three of four components read 1.00
-and the fourth was outvoted. Geometrically it scores 0.465, benzene 0.596, and
-the six highest-scoring molecules in a mixed test set are all real drugs.
+and the fourth was outvoted. Geometrically, and with the weight on the
+component that actually varies, it scores **0.090**.
+
+The weights follow from which components carry information. Measured over
+15,000 real compounds, `alert_penalty` sits at 1.00 for 87.7% of them and
+`complexity_penalty` for 59.1%, while `property_centrality` spreads from 0.43
+to 0.96 across the deciles. Two pinned components holding most of the weight
+contribute nothing but a smaller exponent on the one that varies, which is why
+`property_centrality` outweighs the other two together.
 
 **A component of exactly zero is close to a veto — which is why
 `rule_compliance` is not weighted by default.** It is 0.0 whenever every
@@ -362,12 +369,13 @@ no middle ground. Weighted, it buried marketed drugs:
 
 | | weighted | unweighted (default) |
 |---|---|---|
-| atorvastatin | 0.0038 | **0.4176** |
-| erythromycin | 0.0021 | **0.1717** |
-| ciclosporin | 0.0004 | **0.0130** |
-| peptoid, TPSA 142.7 vs 140 | 0.0033 | **0.3345** |
-| water | 0.4652 | **0.3004** |
-| benzene | 0.5956 | **0.4429** |
+| diazepam | 0.8318 | 0.7487 |
+| aspirin | 0.7357 | 0.6174 |
+| atorvastatin | 0.0022 | **0.1744** |
+| erythromycin | 0.0007 | **0.0295** |
+| ciclosporin | 0.0000 | **0.0004** |
+| benzene | 0.3547 | 0.1962 |
+| water | 0.2164 | 0.0902 |
 
 It cuts both ways: dropping the component lifts molecules that fail their
 rules *and lowers trivially small ones*, because water and benzene were being
@@ -406,14 +414,14 @@ everything except `property_centrality` and so benefits from every floor:
 At no floor does a Ro5-failing real drug outrank water. So `EPSILON` is set
 just high enough to keep `ln()` finite and nothing more.
 
-### Trivially small molecules are a filtering problem, not a scoring one
+### Trivially small molecules are still best filtered, not ranked low
 
-Water at 0.465 is still higher than it should be, and no aggregation fixes
-that: water passes three of four components because it has nothing wrong with
-it, and no combination of "nothing is wrong" concludes "this is a lead".
-Remove such molecules before scoring, with a `descriptor_windows` minimum on
-`molecular_weight` — 150 to 200 is usual — which `finalize` applies as a hard
-filter:
+Weighting `property_centrality` above the components that sit at 1.00 brought
+water down from 0.465 to **0.090**, below atorvastatin at 0.174 — something
+flooring the components could not achieve. It is still cheaper to remove such
+molecules before scoring than to rely on the ranking, with a
+`descriptor_windows` minimum on `molecular_weight` — 150 to 200 is usual —
+which `finalize` applies as a hard filter:
 
 ```json
 {"config": {"descriptor_windows": {"molecular_weight": {"minimum": 150}}}}
