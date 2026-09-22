@@ -17,7 +17,7 @@ from typing import Any
 
 from fastapi import APIRouter, Response, status
 
-from winnow import __version__
+from sorbent import __version__
 
 router = APIRouter(tags=["health"])
 
@@ -39,7 +39,7 @@ async def ready(response: Response) -> dict[str, Any]:
         checks["rdkit"] = f"unavailable: {exc}"
 
     try:
-        from winnow.chem import pipeline  # noqa: F401
+        from sorbent.chem import pipeline  # noqa: F401
 
         checks["chem"] = "importable"
     except Exception as exc:  # noqa: BLE001

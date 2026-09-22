@@ -6,7 +6,7 @@
     MurckoScaffold.MakeScaffoldGeneric(scaffold) # atoms -> C, bonds -> single
 
 The generic form is for clustering by topology; the plain form keeps atom
-identity and is what a chemist expects to see. Winnow reports the plain form
+identity and is what a chemist expects to see. Sorbent reports the plain form
 on every molecule and offers the generic one for callers who want it.
 
 Three things worth knowing:

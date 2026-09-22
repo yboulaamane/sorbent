@@ -30,15 +30,15 @@ fmt:
 	$(VENV)/bin/ruff format .
 
 typecheck:
-	$(VENV)/bin/mypy src/winnow
+	$(VENV)/bin/mypy src/sorbent
 
 check: lint typecheck test-api
 
 run:
-	$(PY) -m uvicorn winnow.main:app --reload --port 8000
+	$(PY) -m uvicorn sorbent.main:app --reload --port 8000
 
 docker:
-	docker build -t winnow:dev .
+	docker build -t sorbent:dev .
 
 clean:
 	rm -rf $(VENV) .pytest_cache .mypy_cache .ruff_cache *.egg-info src/*.egg-info

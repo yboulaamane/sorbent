@@ -7,9 +7,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from winnow.jobs.store import InMemoryJobStore, JobNotFoundError
-from winnow.schemas.filters import TriageConfig
-from winnow.schemas.job import Job, JobCounts, JobProgress, JobStatus
+from sorbent.jobs.store import InMemoryJobStore, JobNotFoundError
+from sorbent.schemas.filters import TriageConfig
+from sorbent.schemas.job import Job, JobCounts, JobProgress, JobStatus
 
 
 def _job(job_id: str = "j1") -> Job:

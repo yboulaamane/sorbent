@@ -7,8 +7,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from winnow.schemas.filters import TriageConfig
-from winnow.schemas.molecule import TriagedMolecule
+from sorbent.schemas.filters import TriageConfig
+from sorbent.schemas.molecule import TriagedMolecule
 
 
 class JobStatus(StrEnum):

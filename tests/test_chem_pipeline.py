@@ -18,8 +18,8 @@ def _records(smiles):
 
 def test_process_chunk_never_raises_on_bad_input():
     """One malformed record must not kill the chunk."""
-    from winnow.chem.pipeline import process_chunk
-    from winnow.schemas.filters import TriageConfig
+    from sorbent.chem.pipeline import process_chunk
+    from sorbent.schemas.filters import TriageConfig
 
     records = _records(["CCO", "C(((", "", "not_a_smiles", "c1ccccc1"])
     out = process_chunk(records, TriageConfig().model_dump(mode="json"))
@@ -31,9 +31,9 @@ def test_process_chunk_never_raises_on_bad_input():
 
 
 def test_process_chunk_output_validates_against_schema(small_library):
-    from winnow.chem.pipeline import process_chunk
-    from winnow.schemas.filters import TriageConfig
-    from winnow.schemas.molecule import TriagedMolecule
+    from sorbent.chem.pipeline import process_chunk
+    from sorbent.schemas.filters import TriageConfig
+    from sorbent.schemas.molecule import TriagedMolecule
 
     out = process_chunk(_records(small_library), TriageConfig().model_dump(mode="json"))
     for m in out:
@@ -43,8 +43,8 @@ def test_process_chunk_output_validates_against_schema(small_library):
 def test_process_chunk_leaves_global_fields_unset(small_library):
     """cluster_id and duplicate_of are phase two's job. A worker that sets them
     is a worker that has guessed, because it cannot see the other chunks."""
-    from winnow.chem.pipeline import process_chunk
-    from winnow.schemas.filters import TriageConfig
+    from sorbent.chem.pipeline import process_chunk
+    from sorbent.schemas.filters import TriageConfig
 
     out = process_chunk(_records(small_library), TriageConfig().model_dump(mode="json"))
     for m in out:
@@ -56,8 +56,8 @@ def test_process_chunk_is_picklable_and_deterministic(small_library):
     """It crosses a process boundary, and two runs must agree."""
     import pickle
 
-    from winnow.chem.pipeline import process_chunk
-    from winnow.schemas.filters import TriageConfig
+    from sorbent.chem.pipeline import process_chunk
+    from sorbent.schemas.filters import TriageConfig
 
     cfg = TriageConfig().model_dump(mode="json")
     a = process_chunk(_records(small_library), cfg)
@@ -69,8 +69,8 @@ def test_process_chunk_is_picklable_and_deterministic(small_library):
 def test_finalize_deduplicates_and_points_at_the_survivor():
     """Charged and neutral aspirin are the same compound. The duplicate is
     reported, not silently dropped - a 12% redundant library is news."""
-    from winnow.chem.pipeline import finalize, process_chunk
-    from winnow.schemas.filters import TriageConfig
+    from sorbent.chem.pipeline import finalize, process_chunk
+    from sorbent.schemas.filters import TriageConfig
 
     cfg = TriageConfig()
     records = _records(
@@ -90,8 +90,8 @@ def test_finalize_deduplicates_and_points_at_the_survivor():
 
 
 def test_finalize_counts_reconcile(small_library):
-    from winnow.chem.pipeline import finalize, process_chunk
-    from winnow.schemas.filters import TriageConfig
+    from sorbent.chem.pipeline import finalize, process_chunk
+    from sorbent.schemas.filters import TriageConfig
 
     cfg = TriageConfig()
     records = _records([*small_library, "C((("])
@@ -105,8 +105,8 @@ def test_finalize_counts_reconcile(small_library):
 def test_finalize_is_order_independent(small_library):
     """as_completed returns chunks in whatever order they finish. The report
     must not depend on that."""
-    from winnow.chem.pipeline import finalize, process_chunk
-    from winnow.schemas.filters import TriageConfig
+    from sorbent.chem.pipeline import finalize, process_chunk
+    from sorbent.schemas.filters import TriageConfig
 
     cfg = TriageConfig()
     records = _records(small_library)
@@ -121,8 +121,8 @@ def test_finalize_is_order_independent(small_library):
 
 
 def test_descriptor_window_drops_and_is_counted(small_library):
-    from winnow.chem.pipeline import finalize, process_chunk
-    from winnow.schemas.filters import DescriptorWindow, TriageConfig
+    from sorbent.chem.pipeline import finalize, process_chunk
+    from sorbent.schemas.filters import DescriptorWindow, TriageConfig
 
     cfg = TriageConfig(descriptor_windows={"molecular_weight": DescriptorWindow(maximum=150.0)})
     out = process_chunk(_records(small_library), cfg.model_dump(mode="json"))
@@ -136,8 +136,8 @@ def test_descriptor_window_drops_and_is_counted(small_library):
 
 def test_top_n_applied_after_representative_selection(small_library):
     """Order matters: top_n first would drop whole clusters."""
-    from winnow.chem.pipeline import finalize, process_chunk
-    from winnow.schemas.filters import TriageConfig
+    from sorbent.chem.pipeline import finalize, process_chunk
+    from sorbent.schemas.filters import TriageConfig
 
     cfg = TriageConfig(cluster=True, representatives_only=True, top_n=2)
     out = process_chunk(_records(small_library), cfg.model_dump(mode="json"))
@@ -148,8 +148,8 @@ def test_top_n_applied_after_representative_selection(small_library):
 
 
 def test_results_are_sorted_by_score_descending(small_library):
-    from winnow.chem.pipeline import finalize, process_chunk
-    from winnow.schemas.filters import TriageConfig
+    from sorbent.chem.pipeline import finalize, process_chunk
+    from sorbent.schemas.filters import TriageConfig
 
     cfg = TriageConfig()
     out = process_chunk(_records(small_library), cfg.model_dump(mode="json"))
@@ -161,8 +161,8 @@ def test_results_are_sorted_by_score_descending(small_library):
 def test_fingerprints_are_stripped_from_output(small_library):
     """_fingerprint is an internal carrier between phases, not part of the
     response model."""
-    from winnow.chem.pipeline import finalize, process_chunk
-    from winnow.schemas.filters import TriageConfig
+    from sorbent.chem.pipeline import finalize, process_chunk
+    from sorbent.schemas.filters import TriageConfig
 
     cfg = TriageConfig()
     out = process_chunk(_records(small_library), cfg.model_dump(mode="json"))

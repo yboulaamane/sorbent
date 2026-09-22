@@ -17,6 +17,6 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
-      - run: mypy src/winnow
+      - run: mypy src/sorbent
       # The whole suite gates CI now that the chem layer is implemented.
       - run: pytest -q

@@ -21,19 +21,20 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from winnow import __version__
-from winnow.api.routes import health, jobs, molecules
-from winnow.config import Settings, get_settings
-from winnow.jobs.runner import TriageRunner
-from winnow.jobs.store import InMemoryJobStore, JobNotFoundError
+from sorbent import __version__
+from sorbent.api.routes import health, jobs, molecules
+from sorbent.config import Settings, get_settings
+from sorbent.jobs.runner import TriageRunner
+from sorbent.jobs.store import InMemoryJobStore, JobNotFoundError
 
 logger = logging.getLogger(__name__)
 
 DESCRIPTION = """
 Submit a compound library, get back a ranked, deduplicated, liability-flagged
-shortlist.
+shortlist. A sorbent is the phase that holds on to what you are after while the
+rest of the mixture flows past.
 
-**Everything Winnow reports is deterministic and citable.** Descriptors come
+**Everything Sorbent reports is deterministic and citable.** Descriptors come
 from RDKit, rule sets are the published literature definitions, structural
 alerts are RDKit's bundled catalogs, and the composite score is a transparent
 weighted sum whose breakdown ships with every molecule. Nothing here is an

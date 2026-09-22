@@ -9,14 +9,14 @@ WORKDIR /app
 # Dependencies first, so a source edit does not re-resolve the whole RDKit
 # wheel on every rebuild.
 COPY pyproject.toml README.md ./
-COPY src/winnow/__init__.py src/winnow/__init__.py
+COPY src/sorbent/__init__.py src/sorbent/__init__.py
 RUN pip install --no-cache-dir -e .
 
 COPY src/ src/
 
 # The pool forks children; running as root is unnecessary.
-RUN useradd --create-home --uid 10001 winnow && chown -R winnow /app
-USER winnow
+RUN useradd --create-home --uid 10001 sorbent && chown -R sorbent /app
+USER sorbent
 
 EXPOSE 8000
 
@@ -27,4 +27,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status==200 else 1)"
 
-CMD ["uvicorn", "winnow.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "sorbent.main:app", "--host", "0.0.0.0", "--port", "8000"]

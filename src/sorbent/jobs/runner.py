@@ -35,9 +35,9 @@ import re
 from concurrent.futures import ProcessPoolExecutor
 from typing import Any
 
-from winnow.jobs.store import JobStore
-from winnow.schemas.filters import TriageConfig
-from winnow.schemas.job import JobCounts, JobProgress, JobStatus
+from sorbent.jobs.store import JobStore
+from sorbent.schemas.filters import TriageConfig
+from sorbent.schemas.job import JobCounts, JobProgress, JobStatus
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ class TriageRunner:
             # Import here, not at module scope: it pulls in RDKit, and the API
             # should boot and serve /health even if the chem layer is broken
             # or RDKit is not installed yet.
-            from winnow.chem.pipeline import finalize, process_chunk
+            from sorbent.chem.pipeline import finalize, process_chunk
 
             config_json = config.model_dump(mode="json")
 

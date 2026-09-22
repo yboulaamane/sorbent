@@ -28,11 +28,11 @@ from typing import Annotated
 from fastapi import APIRouter, File, Form, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 
-from winnow.api.deps import RunnerDep, SettingsDep, StoreDep
-from winnow.jobs.store import JobNotFoundError
-from winnow.schemas.filters import TriageConfig, TriageRequest
-from winnow.schemas.job import Job, JobList, JobStatus, ResultPage
-from winnow.schemas.molecule import TriagedMolecule
+from sorbent.api.deps import RunnerDep, SettingsDep, StoreDep
+from sorbent.jobs.store import JobNotFoundError
+from sorbent.schemas.filters import TriageConfig, TriageRequest
+from sorbent.schemas.job import Job, JobList, JobStatus, ResultPage
+from sorbent.schemas.molecule import TriagedMolecule
 
 router = APIRouter(prefix="/v1/jobs", tags=["jobs"])
 
@@ -59,7 +59,7 @@ async def _create_job(
             detail=(
                 f"library has {len(records)} molecules; the cap is "
                 f"{settings.max_library_size}. Split it or raise "
-                f"WINNOW_MAX_LIBRARY_SIZE."
+                f"SORBENT_MAX_LIBRARY_SIZE."
             ),
         )
     if not records:

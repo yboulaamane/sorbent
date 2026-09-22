@@ -15,9 +15,9 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from winnow.api.deps import SettingsDep
-from winnow.schemas.filters import TriageConfig
-from winnow.schemas.molecule import TriagedMolecule
+from sorbent.api.deps import SettingsDep
+from sorbent.schemas.filters import TriageConfig
+from sorbent.schemas.molecule import TriagedMolecule
 
 router = APIRouter(prefix="/v1/molecules", tags=["molecules"])
 
@@ -47,7 +47,7 @@ async def describe(request: DescribeRequest, settings: SettingsDep) -> DescribeR
             ),
         )
 
-    from winnow.chem.pipeline import process_chunk
+    from sorbent.chem.pipeline import process_chunk
 
     identifiers = request.identifiers or [str(i) for i in range(len(request.smiles))]
     records = list(zip(identifiers, request.smiles, strict=True))
@@ -57,7 +57,7 @@ async def describe(request: DescribeRequest, settings: SettingsDep) -> DescribeR
     except NotImplementedError as exc:
         raise HTTPException(
             status.HTTP_501_NOT_IMPLEMENTED,
-            detail=f"chem layer is still a stub: {exc}. See src/winnow/chem/.",
+            detail=f"chem layer is still a stub: {exc}. See src/sorbent/chem/.",
         ) from exc
 
     return DescribeResponse(molecules=[TriagedMolecule.model_validate(r) for r in results])
@@ -90,7 +90,7 @@ async def standardize(request: StandardizeRequest, settings: SettingsDep) -> Sta
             f"{len(request.smiles)} exceeds the synchronous cap of {settings.max_sync_batch}",
         )
 
-    from winnow.chem.parse import process_record
+    from sorbent.chem.parse import process_record
 
     out: list[StandardizedMolecule] = []
     for smi in request.smiles:
@@ -99,7 +99,7 @@ async def standardize(request: StandardizeRequest, settings: SettingsDep) -> Sta
         except NotImplementedError as exc:
             raise HTTPException(
                 status.HTTP_501_NOT_IMPLEMENTED,
-                detail=f"chem layer is still a stub: {exc}. See src/winnow/chem/parse.py.",
+                detail=f"chem layer is still a stub: {exc}. See src/sorbent/chem/parse.py.",
             ) from exc
         out.append(
             StandardizedMolecule(

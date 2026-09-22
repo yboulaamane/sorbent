@@ -19,7 +19,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
 
-from winnow.schemas.job import Job, JobCounts, JobProgress, JobStatus
+from sorbent.schemas.job import Job, JobCounts, JobProgress, JobStatus
 
 
 class JobNotFoundError(KeyError):

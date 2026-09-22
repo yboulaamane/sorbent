@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 
-from winnow.schemas.job import JobStatus
+from sorbent.schemas.job import JobStatus
 
 
 async def _wait_terminal(client, job_id, timeout=10.0):

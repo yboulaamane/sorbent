@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "winnow"
+name = "sorbent"
 version = "0.1.0"
 description = "A compound triage service: submit a SMILES library, get back a ranked, deduplicated, liability-flagged shortlist."
 readme = "README.md"
@@ -32,11 +32,11 @@ dev = [
 ]
 
 [project.scripts]
-winnow = "winnow.__main__:main"
+sorbent = "sorbent.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["winnow*"]
+include = ["sorbent*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
