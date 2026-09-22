@@ -1,12 +1,12 @@
-from winnow.schemas.filters import (
+from sorbent.schemas.filters import (
     AlertCatalog,
     DescriptorWindow,
     RuleSet,
     TriageConfig,
     TriageRequest,
 )
-from winnow.schemas.job import Job, JobList, JobProgress, JobStatus, ResultPage
-from winnow.schemas.molecule import (
+from sorbent.schemas.job import Job, JobList, JobProgress, JobStatus, ResultPage
+from sorbent.schemas.molecule import (
     Alert,
     Descriptors,
     InputRecord,

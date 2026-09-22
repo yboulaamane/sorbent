@@ -61,7 +61,7 @@ if TYPE_CHECKING:
     from rdkit.Chem import Mol
 
 #: Descriptor keys this module promises to return. Must stay in sync with the
-#: fields of ``winnow.schemas.molecule.Descriptors`` - the test suite asserts it.
+#: fields of ``sorbent.schemas.molecule.Descriptors`` - the test suite asserts it.
 DESCRIPTOR_NAMES: tuple[str, ...] = (
     "molecular_weight",
     "heavy_atoms",

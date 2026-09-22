@@ -128,7 +128,7 @@ class TriageConfig(BaseModel):
 
     @model_validator(mode="after")
     def _check_windows(self) -> TriageConfig:
-        from winnow.schemas.molecule import Descriptors
+        from sorbent.schemas.molecule import Descriptors
 
         allowed = set(Descriptors.model_fields)
         unknown = set(self.descriptor_windows) - allowed

@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from winnow.config import Settings
-from winnow.main import create_app
+from sorbent.config import Settings
+from sorbent.main import create_app
 
 
 @pytest.fixture

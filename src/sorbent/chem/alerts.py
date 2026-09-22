@@ -49,7 +49,7 @@ from typing import TYPE_CHECKING, Any
 
 from rdkit.Chem import FilterCatalog
 
-from winnow.schemas.filters import AlertCatalog
+from sorbent.schemas.filters import AlertCatalog
 
 if TYPE_CHECKING:
     from rdkit.Chem import Mol
@@ -134,7 +134,7 @@ def _matched_atoms(entry: Any, mol: Mol) -> list[int]:
 def find_alerts(mol: Mol, catalogs: list[AlertCatalog]) -> list[dict[str, object]]:
     """Return every alert match across the requested catalogs.
 
-    Each dict is shaped like ``winnow.schemas.molecule.Alert``. All matches are
+    Each dict is shaped like ``sorbent.schemas.molecule.Alert``. All matches are
     returned, not the first: a compound tripping six BRENK alerts is a
     different proposition from one tripping a single borderline alert, and the
     count is what ``score.alert_penalty`` consumes.

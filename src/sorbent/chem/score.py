@@ -1,6 +1,6 @@
 """The composite triage score.
 
-This is the one place in Winnow where judgement enters, so it is also the one
+This is the one place in Sorbent where judgement enters, so it is also the one
 place that must be fully transparent: every score ships with its breakdown, and
 the weights are caller-supplied.
 

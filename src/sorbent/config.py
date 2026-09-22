@@ -1,6 +1,6 @@
 """Application settings.
 
-Everything is overridable from the environment with a ``WINNOW_`` prefix, or
+Everything is overridable from the environment with a ``SORBENT_`` prefix, or
 from a ``.env`` file. Settings are consumed through the ``get_settings``
 dependency rather than imported as a module-level singleton, so tests can
 override them per-request.
@@ -17,13 +17,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="WINNOW_",
+        env_prefix="SORBENT_",
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
-    app_name: str = "Winnow"
+    app_name: str = "Sorbent"
     log_level: str = "INFO"
 
     # --- limits -------------------------------------------------------------

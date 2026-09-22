@@ -12,9 +12,9 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from winnow.config import Settings, get_settings
-from winnow.jobs.runner import TriageRunner
-from winnow.jobs.store import JobStore
+from sorbent.config import Settings, get_settings
+from sorbent.jobs.runner import TriageRunner
+from sorbent.jobs.store import JobStore
 
 
 def get_store(request: Request) -> JobStore:

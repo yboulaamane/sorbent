@@ -1,9 +1,12 @@
-# Winnow
+# Sorbent
 
 **A compound triage service.** Submit a SMILES library, get back a ranked,
 deduplicated, liability-flagged shortlist.
 
-Everything Winnow reports is **deterministic and citable**. Descriptors come
+*A sorbent is the phase that holds on to what you are after while the rest of
+the mixture flows past.*
+
+Everything Sorbent reports is **deterministic and citable**. Descriptors come
 from RDKit, the rule sets are the published literature definitions, the
 structural alerts are RDKit's bundled catalogs, and the composite score is a
 transparent weighted sum that ships its own breakdown with every molecule.
@@ -121,7 +124,7 @@ pool is a partial fix — RDKit releases the GIL inside its C++ calls — but th
 Python glue between them does not.
 
 So: a `ProcessPoolExecutor` driven from an async supervisor
-([`jobs/runner.py`](src/winnow/jobs/runner.py)). The parent stays responsive,
+([`jobs/runner.py`](src/sorbent/jobs/runner.py)). The parent stays responsive,
 workers do the chemistry, results come back over a pickle boundary — and that
 boundary is what shapes the next decision.
 
@@ -131,7 +134,7 @@ and CPython changes this default in 3.14.
 
 ### 2. A two-phase pipeline
 
-[`chem/pipeline.py`](src/winnow/chem/pipeline.py) splits into:
+[`chem/pipeline.py`](src/sorbent/chem/pipeline.py) splits into:
 
 - **`process_chunk`** — embarrassingly parallel. Everything depending on one
   molecule only: parse, standardise, descriptors, rules, alerts, scaffold,
@@ -147,7 +150,7 @@ turn subtly non-deterministic under parallelism, which is why
 
 ### 3. Storage behind an interface
 
-[`jobs/store.py`](src/winnow/jobs/store.py) defines an abstract `JobStore`; the
+[`jobs/store.py`](src/sorbent/jobs/store.py) defines an abstract `JobStore`; the
 in-memory implementation is enough to develop against but dies with the process
 and is not shared between uvicorn workers. Write a `RedisJobStore` against the
 same interface and change one line in the lifespan — the routes never learn
@@ -158,7 +161,7 @@ one never awaits, precisely so that swap costs nothing.
 
 ## The science layer
 
-Nine modules under [`src/winnow/chem/`](src/winnow/chem/), each documenting the
+Nine modules under [`src/sorbent/chem/`](src/sorbent/chem/), each documenting the
 algorithm, the RDKit calls and the traps found while building it:
 
 | # | Module | What it does | Watch out for |
@@ -418,15 +421,15 @@ filter:
 
 ## Config
 
-Everything is `WINNOW_`-prefixed; see [`.env.example`](.env.example) and
-[`config.py`](src/winnow/config.py).
+Everything is `SORBENT_`-prefixed; see [`.env.example`](.env.example) and
+[`config.py`](src/sorbent/config.py).
 
 | Variable | Default | |
 |---|---|---|
-| `WINNOW_MAX_LIBRARY_SIZE` | 250000 | Hard cap per job |
-| `WINNOW_CHUNK_SIZE` | 2000 | Molecules per worker unit. Too small and pickling dominates; too large and progress goes lumpy |
-| `WINNOW_WORKER_PROCESSES` | 0 | 0 → `os.cpu_count()` |
-| `WINNOW_MAX_SYNC_BATCH` | 100 | Cap on the synchronous endpoints |
+| `SORBENT_MAX_LIBRARY_SIZE` | 250000 | Hard cap per job |
+| `SORBENT_CHUNK_SIZE` | 2000 | Molecules per worker unit. Too small and pickling dominates; too large and progress goes lumpy |
+| `SORBENT_WORKER_PROCESSES` | 0 | 0 → `os.cpu_count()` |
+| `SORBENT_MAX_SYNC_BATCH` | 100 | Cap on the synchronous endpoints |
 
 ---
 
@@ -467,7 +470,7 @@ Stated rather than hidden:
 ## Layout
 
 ```
-src/winnow/
+src/sorbent/
   main.py              app factory + lifespan (owns store and pool)
   config.py            pydantic-settings
   api/

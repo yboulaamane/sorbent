@@ -45,16 +45,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from winnow.chem.alerts import find_alerts
-from winnow.chem.cluster import assign_clusters, butina_cluster
-from winnow.chem.descriptors import compute_descriptors
-from winnow.chem.fingerprints import compute_fingerprint
-from winnow.chem.parse import process_record
-from winnow.chem.rules import evaluate
-from winnow.chem.scaffolds import murcko_scaffold
-from winnow.chem.score import composite_score
-from winnow.schemas.filters import TriageConfig
-from winnow.schemas.job import JobCounts
+from sorbent.chem.alerts import find_alerts
+from sorbent.chem.cluster import assign_clusters, butina_cluster
+from sorbent.chem.descriptors import compute_descriptors
+from sorbent.chem.fingerprints import compute_fingerprint
+from sorbent.chem.parse import process_record
+from sorbent.chem.rules import evaluate
+from sorbent.chem.scaffolds import murcko_scaffold
+from sorbent.chem.score import composite_score
+from sorbent.schemas.filters import TriageConfig
+from sorbent.schemas.job import JobCounts
 
 #: Where phase one parks the fingerprint for phase two. Private, and stripped
 #: before the result leaves finalize - it is not part of TriagedMolecule.

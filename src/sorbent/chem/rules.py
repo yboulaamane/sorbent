@@ -39,7 +39,7 @@ rejects the last two (76, 118). The second is the drug-like set. Hence
 
 Two deviations from the papers, both deliberate:
 
-  Ghose additionally constrains molar refractivity to 40-130. Winnow does not
+  Ghose additionally constrains molar refractivity to 40-130. Sorbent does not
   compute MR, so that clause is silently absent - a molecule passing `ghose`
   here has met three of the four original criteria. Add ``Crippen.MolMR`` to
   ``descriptors.py`` and a bound below if you need the full filter.
@@ -59,7 +59,7 @@ import math
 from collections.abc import Callable
 from typing import NamedTuple
 
-from winnow.schemas.filters import RuleSet
+from sorbent.schemas.filters import RuleSet
 
 #: Lipinski's one-violation allowance, named rather than buried in a comparison.
 #: This is the clause that gets implemented wrong.

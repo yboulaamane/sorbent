@@ -56,7 +56,7 @@ flat layout, for reference, is: for molecule i, distances to 0..i-1,
 concatenated. Row 0 is empty, which is why ``fingerprints.bulk_tanimoto``
 returns [] for an empty target list.
 
-Winnow's contract: cluster 0 is the largest cluster, and within a cluster the
+Sorbent's contract: cluster 0 is the largest cluster, and within a cluster the
 first element is the Butina centroid. RDKit happens to return clusters
 largest-first already, but that is not documented as a guarantee, so the sort
 here is explicit. It is a stable sort, so equal-sized clusters keep Butina's
@@ -71,7 +71,7 @@ import numpy as np
 from numpy.typing import NDArray
 from rdkit.ML.Cluster import Butina
 
-from winnow.chem.fingerprints import bulk_tanimoto
+from sorbent.chem.fingerprints import bulk_tanimoto
 
 #: Above this, exact Butina clustering is refused rather than attempted. The
 #: pipeline turns this into a clear job error naming the alternative. Chosen

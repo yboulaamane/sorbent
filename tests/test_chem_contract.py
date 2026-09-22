@@ -22,7 +22,7 @@ pytestmark = pytest.mark.chem
 
 
 def test_parse_valid_smiles(aspirin):
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.parse import parse_smiles
 
     assert parse_smiles(aspirin) is not None
 
@@ -31,14 +31,14 @@ def test_parse_valid_smiles(aspirin):
 def test_parse_returns_none_and_never_raises(bad):
     """A 200k-compound vendor file WILL contain these. One bad line must not
     take down a chunk."""
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.parse import parse_smiles
 
     assert parse_smiles(bad) is None
 
 
 def test_standardize_strips_salt():
     """The sodium must go, and the parent must survive intact."""
-    from winnow.chem.parse import process_record
+    from sorbent.chem.parse import process_record
 
     salt = process_record("CC(=O)Oc1ccccc1C(=O)[O-].[Na+]")
     free = process_record("CC(=O)Oc1ccccc1C(=O)O")
@@ -49,7 +49,7 @@ def test_standardize_strips_salt():
 def test_standardize_is_idempotent(aspirin):
     """Standardising twice must not keep changing the answer - otherwise your
     InChIKeys depend on how many times a record went through the pipeline."""
-    from winnow.chem.parse import process_record
+    from sorbent.chem.parse import process_record
 
     once = process_record(aspirin).standard_smiles
     twice = process_record(once).standard_smiles
@@ -59,7 +59,7 @@ def test_standardize_is_idempotent(aspirin):
 def test_standardize_does_not_mutate_input(aspirin):
     from rdkit import Chem
 
-    from winnow.chem.parse import parse_smiles, standardize
+    from sorbent.chem.parse import parse_smiles, standardize
 
     mol = parse_smiles("CC(=O)Oc1ccccc1C(=O)[O-].[Na+]")
     before = Chem.MolToSmiles(mol)
@@ -68,7 +68,7 @@ def test_standardize_does_not_mutate_input(aspirin):
 
 
 def test_inchikey_shape(aspirin):
-    from winnow.chem.parse import parse_smiles, to_inchikey
+    from sorbent.chem.parse import parse_smiles, to_inchikey
 
     key = to_inchikey(parse_smiles(aspirin))
     assert key is not None
@@ -76,7 +76,7 @@ def test_inchikey_shape(aspirin):
 
 
 def test_process_record_reports_error_not_raises():
-    from winnow.chem.parse import process_record
+    from sorbent.chem.parse import process_record
 
     result = process_record("C(((")
     assert result.mol is None
@@ -100,7 +100,7 @@ def test_standardisation_preserves_defined_stereo(smiles):
     alpha carbon of every amino acid. Without the flag set False, this test
     sees L-alanine come back racemic.
     """
-    from winnow.chem.parse import process_record
+    from sorbent.chem.parse import process_record
 
     result = process_record(smiles)
     assert result.error is None
@@ -108,7 +108,7 @@ def test_standardisation_preserves_defined_stereo(smiles):
 
 
 def test_standardisation_preserves_double_bond_geometry():
-    from winnow.chem.parse import process_record
+    from sorbent.chem.parse import process_record
 
     assert "/" in process_record("C/C=C/C(=O)O").standard_smiles
 
@@ -120,7 +120,7 @@ def test_dummy_atom_only_records_are_rejected(placeholder):
     Same failure class as MolFromSmiles("") returning an empty Mol: valid to
     RDKit, not a compound.
     """
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.parse import parse_smiles
 
     assert parse_smiles(placeholder) is None
 
@@ -128,7 +128,7 @@ def test_dummy_atom_only_records_are_rejected(placeholder):
 def test_attachment_points_on_a_real_fragment_are_kept():
     """A dummy atom alongside real atoms is an ordinary fragment-library
     attachment point, and must survive."""
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.parse import parse_smiles
 
     assert parse_smiles("*c1ccccc1") is not None
 
@@ -142,13 +142,13 @@ def test_attachment_points_on_a_real_fragment_are_kept():
 )
 def test_tautomers_collapse_to_one_key(a, b):
     """What the expensive tautomer pass buys: these dedupe against each other."""
-    from winnow.chem.parse import process_record
+    from sorbent.chem.parse import process_record
 
     assert process_record(a).inchikey == process_record(b).inchikey
 
 
 def test_skipping_tautomer_canonicalisation_is_allowed(aspirin):
-    from winnow.chem.parse import parse_smiles, standardize
+    from sorbent.chem.parse import parse_smiles, standardize
 
     assert standardize(parse_smiles(aspirin), canonical_tautomer=False) is not None
 
@@ -159,7 +159,7 @@ def test_skipping_tautomer_canonicalisation_is_allowed(aspirin):
 )
 def test_spreadsheet_junk_is_rejected_cleanly(junk):
     """The contents of a real vendor SMILES column."""
-    from winnow.chem.parse import process_record
+    from sorbent.chem.parse import process_record
 
     result = process_record(junk)
     assert result.mol is None
@@ -168,7 +168,7 @@ def test_spreadsheet_junk_is_rejected_cleanly(junk):
 
 def test_mol_is_none_exactly_when_error_is_set():
     """The ParsedMolecule contract the pipeline relies on."""
-    from winnow.chem.parse import process_record
+    from sorbent.chem.parse import process_record
 
     for smiles in ["CCO", "", "C(((", "c1ccccc1", "garbage", "*", "[Na+].[Cl-]"]:
         result = process_record(smiles)
@@ -181,9 +181,9 @@ def test_mol_is_none_exactly_when_error_is_set():
 def test_descriptor_keys_match_schema(aspirin):
     """The dict must line up with the response model exactly, or the route
     layer will 500 on validation."""
-    from winnow.chem.descriptors import DESCRIPTOR_NAMES, compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.schemas.molecule import Descriptors
+    from sorbent.chem.descriptors import DESCRIPTOR_NAMES, compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.schemas.molecule import Descriptors
 
     desc = compute_descriptors(parse_smiles(aspirin))
     assert set(desc) == set(DESCRIPTOR_NAMES)
@@ -193,8 +193,8 @@ def test_descriptor_keys_match_schema(aspirin):
 
 def test_aspirin_descriptors_are_right(aspirin):
     """Known values. If these drift, something in standardisation changed."""
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
 
     d = compute_descriptors(parse_smiles(aspirin))
     assert d["molecular_weight"] == pytest.approx(180.16, abs=0.1)
@@ -207,8 +207,8 @@ def test_aspirin_descriptors_are_right(aspirin):
 
 def test_unassigned_stereocentres_are_counted():
     """Undefined stereo is a purchasing problem worth flagging."""
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
 
     defined = compute_descriptors(parse_smiles("C[C@H](N)C(=O)O"))
     undefined = compute_descriptors(parse_smiles("CC(N)C(=O)O"))
@@ -226,8 +226,8 @@ def test_unassigned_stereocentres_are_counted():
     ],
 )
 def test_partial_stereo_assignment_is_counted_correctly(smiles, total, unassigned):
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
 
     desc = compute_descriptors(parse_smiles(smiles))
     assert desc["stereocentres"] == total
@@ -242,8 +242,8 @@ def test_double_bond_geometry_is_not_counted_as_a_stereocentre():
     starts failing, someone has moved to FindPotentialStereo - update the
     Descriptors schema to match.
     """
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
 
     assert compute_descriptors(parse_smiles("CC=CC(=O)O"))["unassigned_stereocentres"] == 0
 
@@ -259,8 +259,8 @@ def test_double_bond_geometry_is_not_counted_as_a_stereocentre():
 )
 def test_molecular_weight_matches_literature(name, smiles, mw):
     """Average mass, not monoisotopic - ExactMolWt would fail every one."""
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
 
     desc = compute_descriptors(parse_smiles(smiles))
     assert desc["molecular_weight"] == pytest.approx(mw, abs=0.05)
@@ -269,8 +269,8 @@ def test_molecular_weight_matches_literature(name, smiles, mw):
 def test_counts_are_python_ints_not_floats():
     """Pydantic declares these as int. A numpy scalar or a float would either
     fail validation or serialise as 13.0, and only show up in production."""
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
 
     desc = compute_descriptors(parse_smiles("CC(=O)Oc1ccccc1C(=O)O"))
     integral = (
@@ -293,7 +293,7 @@ def test_counts_are_python_ints_not_floats():
 def test_formal_charge_is_reported():
     from rdkit import Chem
 
-    from winnow.chem.descriptors import compute_descriptors
+    from sorbent.chem.descriptors import compute_descriptors
 
     # Not via parse_smiles: standardisation would neutralise it.
     assert compute_descriptors(Chem.MolFromSmiles("CC(=O)[O-]"))["formal_charge"] == -1
@@ -317,7 +317,7 @@ def test_awkward_chemistry_does_not_raise(smiles):
     """A vendor library contains all of these. None may kill a chunk."""
     from rdkit import Chem
 
-    from winnow.chem.descriptors import DESCRIPTOR_NAMES, compute_descriptors
+    from sorbent.chem.descriptors import DESCRIPTOR_NAMES, compute_descriptors
 
     desc = compute_descriptors(Chem.MolFromSmiles(smiles))
     assert set(desc) == set(DESCRIPTOR_NAMES)
@@ -326,7 +326,7 @@ def test_awkward_chemistry_does_not_raise(smiles):
 def test_carbon_free_molecule_has_zero_fsp3():
     from rdkit import Chem
 
-    from winnow.chem.descriptors import compute_descriptors
+    from sorbent.chem.descriptors import compute_descriptors
 
     assert compute_descriptors(Chem.MolFromSmiles("O"))["fraction_csp3"] == 0.0
 
@@ -336,7 +336,7 @@ def test_carbon_free_molecule_has_zero_fsp3():
 
 def test_lipinski_allows_one_violation():
     """The single most commonly mis-implemented rule in cheminformatics."""
-    from winnow.chem.rules import lipinski
+    from sorbent.chem.rules import lipinski
 
     one_violation = {"molecular_weight": 520, "clogp": 3.0, "hbd": 2, "hba": 5}
     passed, violations = lipinski(one_violation)
@@ -345,7 +345,7 @@ def test_lipinski_allows_one_violation():
 
 
 def test_lipinski_fails_on_two_violations():
-    from winnow.chem.rules import lipinski
+    from sorbent.chem.rules import lipinski
 
     passed, violations = lipinski({"molecular_weight": 520, "clogp": 6.0, "hbd": 2, "hba": 5})
     assert passed is False
@@ -353,7 +353,7 @@ def test_lipinski_fails_on_two_violations():
 
 
 def test_veber_requires_both():
-    from winnow.chem.rules import veber
+    from sorbent.chem.rules import veber
 
     assert veber({"rotatable_bonds": 5, "tpsa": 90})[0] is True
     assert veber({"rotatable_bonds": 12, "tpsa": 90})[0] is False
@@ -361,18 +361,18 @@ def test_veber_requires_both():
 
 
 def test_rule_functions_registry_is_complete():
-    from winnow.chem.rules import RULE_FUNCTIONS
-    from winnow.schemas.filters import RuleSet
+    from sorbent.chem.rules import RULE_FUNCTIONS
+    from sorbent.schemas.filters import RuleSet
 
     assert set(RULE_FUNCTIONS) == set(RuleSet)
 
 
 def test_evaluate_shape_matches_schema(aspirin):
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.rules import evaluate
-    from winnow.schemas.filters import RuleSet
-    from winnow.schemas.molecule import RuleResult
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.rules import evaluate
+    from sorbent.schemas.filters import RuleSet
+    from sorbent.schemas.molecule import RuleResult
 
     desc = compute_descriptors(parse_smiles(aspirin))
     results = evaluate(desc, [RuleSet.LIPINSKI, RuleSet.VEBER])
@@ -383,7 +383,7 @@ def test_evaluate_shape_matches_schema(aspirin):
 
 def test_lipinski_reports_violations_even_when_passing():
     """A borderline compound must be visibly borderline, not just 'passed'."""
-    from winnow.chem.rules import lipinski
+    from sorbent.chem.rules import lipinski
 
     passed, violations = lipinski({"molecular_weight": 501, "clogp": 2.0, "hbd": 1, "hba": 4})
     assert passed is True
@@ -392,7 +392,7 @@ def test_lipinski_reports_violations_even_when_passing():
 
 @pytest.mark.parametrize("mw,expected", [(499, []), (500, []), (501, ["MW 501 > 500"])])
 def test_rule_boundaries_are_inclusive(mw, expected):
-    from winnow.chem.rules import lipinski
+    from sorbent.chem.rules import lipinski
 
     assert lipinski({"molecular_weight": mw, "clogp": 0, "hbd": 0, "hba": 0})[1] == expected
 
@@ -407,9 +407,9 @@ def test_ghose_atom_count_includes_hydrogens():
     Read as heavy atoms the filter inverts - it rejects aspirin (13 heavy,
     21 total) and accepts erythromycin (51 heavy, 118 total).
     """
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.rules import ghose
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.rules import ghose
 
     aspirin = compute_descriptors(parse_smiles("CC(=O)Oc1ccccc1C(=O)O"))
     assert aspirin["heavy_atoms"] == 13
@@ -431,8 +431,8 @@ def test_ghose_atom_count_includes_hydrogens():
 def test_total_atoms_matches_addhs():
     from rdkit import Chem
 
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
 
     for smiles in ["CC(=O)Oc1ccccc1C(=O)O", "c1ccccc1", "CC(C)Cc1ccc(cc1)C(C)C(=O)O"]:
         mol = parse_smiles(smiles)
@@ -458,16 +458,16 @@ def test_total_atoms_matches_addhs():
     ],
 )
 def test_lipinski_agrees_with_known_drugs(drug, smiles, lipinski_passes):
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.rules import lipinski
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.rules import lipinski
 
     desc = compute_descriptors(parse_smiles(smiles))
     assert lipinski(desc)[0] is lipinski_passes, drug
 
 
 def test_veber_and_egan_thresholds():
-    from winnow.chem.rules import egan, veber
+    from sorbent.chem.rules import egan, veber
 
     assert veber({"rotatable_bonds": 10, "tpsa": 140})[0] is True
     assert veber({"rotatable_bonds": 11, "tpsa": 140})[0] is False
@@ -477,7 +477,7 @@ def test_veber_and_egan_thresholds():
 
 
 def test_fragment_rule_of_three():
-    from winnow.chem.rules import fragment
+    from sorbent.chem.rules import fragment
 
     ro3 = {"molecular_weight": 300, "clogp": 3, "hbd": 3, "hba": 3, "rotatable_bonds": 3}
     assert fragment(ro3)[0] is True
@@ -487,7 +487,7 @@ def test_fragment_rule_of_three():
 def test_missing_descriptor_raises_rather_than_silently_skipping():
     """A rule that quietly drops a constraint it cannot evaluate is worse than
     one that fails loudly."""
-    from winnow.chem.rules import ghose
+    from sorbent.chem.rules import ghose
 
     with pytest.raises(KeyError, match="total_atoms"):
         ghose({"molecular_weight": 300, "clogp": 2.0})
@@ -498,17 +498,17 @@ def test_non_finite_descriptor_raises(bad):
     """NaN compares False against every bound, so it would sail through as a
     clean molecule. This module is meant to run over caller-supplied CSVs,
     where NaN is entirely realistic."""
-    from winnow.chem.rules import lipinski
+    from sorbent.chem.rules import lipinski
 
     with pytest.raises(ValueError, match="finite"):
         lipinski({"molecular_weight": bad, "clogp": 2.0, "hbd": 1, "hba": 4})
 
 
 def test_evaluate_collapses_duplicate_rule_sets(aspirin):
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.rules import evaluate
-    from winnow.schemas.filters import RuleSet
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.rules import evaluate
+    from sorbent.schemas.filters import RuleSet
 
     desc = compute_descriptors(parse_smiles(aspirin))
     results = evaluate(desc, [RuleSet.LIPINSKI, RuleSet.VEBER, RuleSet.LIPINSKI])
@@ -517,10 +517,10 @@ def test_evaluate_collapses_duplicate_rule_sets(aspirin):
 
 def test_evaluate_names_are_the_requested_enum_values(aspirin):
     """So a client can correlate results against what it asked for."""
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.rules import evaluate
-    from winnow.schemas.filters import RuleSet
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.rules import evaluate
+    from sorbent.schemas.filters import RuleSet
 
     desc = compute_descriptors(parse_smiles(aspirin))
     requested = list(RuleSet)
@@ -534,7 +534,7 @@ def test_rules_module_imports_no_rdkit():
     import ast
     import pathlib
 
-    import winnow.chem.rules as rules_module
+    import sorbent.chem.rules as rules_module
 
     source = pathlib.Path(rules_module.__file__).read_text()
     imported = set()
@@ -552,26 +552,26 @@ def test_rules_module_imports_no_rdkit():
 def test_catalog_is_cached():
     """Rebuilding a FilterCatalog per molecule makes this the slowest stage in
     the pipeline by roughly an order of magnitude."""
-    from winnow.chem.alerts import get_catalog
-    from winnow.schemas.filters import AlertCatalog
+    from sorbent.chem.alerts import get_catalog
+    from sorbent.schemas.filters import AlertCatalog
 
     assert get_catalog(AlertCatalog.PAINS) is get_catalog(AlertCatalog.PAINS)
 
 
 def test_clean_molecule_has_no_pains(aspirin):
-    from winnow.chem.alerts import find_alerts
-    from winnow.chem.parse import parse_smiles
-    from winnow.schemas.filters import AlertCatalog
+    from sorbent.chem.alerts import find_alerts
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.schemas.filters import AlertCatalog
 
     assert find_alerts(parse_smiles(aspirin), [AlertCatalog.PAINS]) == []
 
 
 def test_known_pains_is_flagged():
     """A catechol / quinone-forming motif - a textbook PAINS hit."""
-    from winnow.chem.alerts import find_alerts
-    from winnow.chem.parse import parse_smiles
-    from winnow.schemas.filters import AlertCatalog
-    from winnow.schemas.molecule import Alert
+    from sorbent.chem.alerts import find_alerts
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.schemas.filters import AlertCatalog
+    from sorbent.schemas.molecule import Alert
 
     mol = parse_smiles("Oc1ccccc1O")
     hits = find_alerts(mol, [AlertCatalog.PAINS, AlertCatalog.BRENK])
@@ -581,15 +581,15 @@ def test_known_pains_is_flagged():
 
 
 def test_every_alert_catalog_is_mapped_and_cached():
-    from winnow.chem.alerts import get_catalog
-    from winnow.schemas.filters import AlertCatalog
+    from sorbent.chem.alerts import get_catalog
+    from sorbent.schemas.filters import AlertCatalog
 
     for member in AlertCatalog:
         assert get_catalog(member) is get_catalog(member), member
 
 
 def test_unmapped_catalog_raises_clearly():
-    from winnow.chem.alerts import get_catalog
+    from sorbent.chem.alerts import get_catalog
 
     with pytest.raises(KeyError, match="_RDKIT_CATALOG"):
         get_catalog("not_a_catalog")  # type: ignore[arg-type]
@@ -607,10 +607,10 @@ def test_unmapped_catalog_raises_clearly():
     ],
 )
 def test_known_liabilities_are_flagged(name, smiles):
-    from winnow.chem.alerts import find_alerts
-    from winnow.chem.parse import parse_smiles
-    from winnow.schemas.filters import AlertCatalog
-    from winnow.schemas.molecule import Alert
+    from sorbent.chem.alerts import find_alerts
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.schemas.filters import AlertCatalog
+    from sorbent.schemas.molecule import Alert
 
     hits = find_alerts(parse_smiles(smiles), [AlertCatalog.PAINS, AlertCatalog.BRENK])
     assert hits, f"{name} should trip an alert"
@@ -621,9 +621,9 @@ def test_known_liabilities_are_flagged(name, smiles):
 @pytest.mark.parametrize("smiles", ["Cn1cnc2c1c(=O)n(C)c(=O)n2C", "CC(C)Cc1ccc(cc1)C(C)C(=O)O"])
 def test_clean_drugs_are_not_flagged(smiles):
     """Caffeine and ibuprofen. A filter that fires on everything is useless."""
-    from winnow.chem.alerts import find_alerts
-    from winnow.chem.parse import parse_smiles
-    from winnow.schemas.filters import AlertCatalog
+    from sorbent.chem.alerts import find_alerts
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.schemas.filters import AlertCatalog
 
     assert find_alerts(parse_smiles(smiles), [AlertCatalog.PAINS, AlertCatalog.BRENK]) == []
 
@@ -633,9 +633,9 @@ def test_overlapping_catalog_requests_do_not_double_count():
     requesting PAINS and PAINS_B together would report catechol twice - and
     n_alerts feeds alert_penalty, so the molecule would be penalised twice for
     one liability."""
-    from winnow.chem.alerts import find_alerts
-    from winnow.chem.parse import parse_smiles
-    from winnow.schemas.filters import AlertCatalog as AC
+    from sorbent.chem.alerts import find_alerts
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.schemas.filters import AlertCatalog as AC
 
     mol = parse_smiles("Oc1ccccc1O")
     alone = find_alerts(mol, [AC.PAINS])
@@ -648,9 +648,9 @@ def test_independent_catalogs_agreeing_are_both_reported():
     """PAINS calls it catechol_A(92), BRENK calls it catechol. Two catalogs
     agreeing is worth seeing, and must not be collapsed like the overlap above.
     """
-    from winnow.chem.alerts import find_alerts
-    from winnow.chem.parse import parse_smiles
-    from winnow.schemas.filters import AlertCatalog as AC
+    from sorbent.chem.alerts import find_alerts
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.schemas.filters import AlertCatalog as AC
 
     hits = find_alerts(parse_smiles("Oc1ccccc1O"), [AC.PAINS, AC.BRENK, AC.NIH])
     assert {h["catalog"] for h in hits} == {"PAINS_B", "Brenk", "NIH"}
@@ -660,9 +660,9 @@ def test_catalog_field_is_the_entrys_family_not_the_request():
     """The PAINS alert catechol_A(92) belongs to FilterSet PAINS_B - the _A is
     Baell's own numbering, not the family letter. Reporting the requested
     catalog would lose that, and reporting the name's letter would be wrong."""
-    from winnow.chem.alerts import find_alerts
-    from winnow.chem.parse import parse_smiles
-    from winnow.schemas.filters import AlertCatalog
+    from sorbent.chem.alerts import find_alerts
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.schemas.filters import AlertCatalog
 
     (hit,) = find_alerts(parse_smiles("Oc1ccccc1O"), [AlertCatalog.PAINS])
     assert hit["name"] == "catechol_A(92)"
@@ -673,9 +673,9 @@ def test_atom_indices_cover_every_occurrence():
     """GetFilterMatches returns ONE match per entry, so a naive read reports
     only the first nitro of a dinitro compound - a client would highlight one
     and leave the other looking clean."""
-    from winnow.chem.alerts import find_alerts
-    from winnow.chem.parse import parse_smiles
-    from winnow.schemas.filters import AlertCatalog
+    from sorbent.chem.alerts import find_alerts
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.schemas.filters import AlertCatalog
 
     mol = parse_smiles("O=[N+]([O-])c1ccc(cc1)[N+](=O)[O-]")
     nitro = next(h for h in find_alerts(mol, [AlertCatalog.BRENK]) if h["name"] == "nitro_group")
@@ -683,9 +683,9 @@ def test_atom_indices_cover_every_occurrence():
 
 
 def test_atom_indices_are_valid_indices_into_the_molecule():
-    from winnow.chem.alerts import find_alerts
-    from winnow.chem.parse import parse_smiles
-    from winnow.schemas.filters import AlertCatalog as AC
+    from sorbent.chem.alerts import find_alerts
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.schemas.filters import AlertCatalog as AC
 
     for smiles in ["Oc1ccccc1O", "O=C1CSC(=S)N1", "Clc1ccc(Cl)c(Cl)c1Cl"]:
         mol = parse_smiles(smiles)
@@ -696,8 +696,8 @@ def test_atom_indices_are_valid_indices_into_the_molecule():
 
 
 def test_no_catalogs_requested_returns_nothing():
-    from winnow.chem.alerts import find_alerts
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.alerts import find_alerts
+    from sorbent.chem.parse import parse_smiles
 
     assert find_alerts(parse_smiles("Oc1ccccc1O"), []) == []
 
@@ -706,16 +706,16 @@ def test_no_catalogs_requested_returns_nothing():
 
 
 def test_murcko_scaffold_of_aspirin(aspirin):
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.scaffolds import murcko_scaffold
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.scaffolds import murcko_scaffold
 
     assert murcko_scaffold(parse_smiles(aspirin)) == "c1ccccc1"
 
 
 def test_acyclic_molecule_has_no_scaffold():
     """None, not '' - so a client can tell 'acyclic' from 'failed'."""
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.scaffolds import murcko_scaffold
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.scaffolds import murcko_scaffold
 
     assert murcko_scaffold(parse_smiles("CCCCO")) is None
 
@@ -726,7 +726,7 @@ def test_acyclic_inputs_give_none_from_both_variants(smiles):
     from a failure once it lands in a report."""
     from rdkit import Chem
 
-    from winnow.chem.scaffolds import generic_scaffold, murcko_scaffold
+    from sorbent.chem.scaffolds import generic_scaffold, murcko_scaffold
 
     mol = Chem.MolFromSmiles(smiles)
     assert murcko_scaffold(mol) is None
@@ -738,8 +738,8 @@ def test_scaffold_is_written_without_stereochemistry():
     c1cncc([C@@H]2CCCN2)c1 and c1cncc([C@H]2CCCN2)c1 and land in different
     groups, which defeats the point of a scaffold as a chemotype key. RDKit's
     own MurckoScaffoldSmiles defaults to includeChirality=False."""
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.scaffolds import murcko_scaffold
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.scaffolds import murcko_scaffold
 
     scaffolds = {
         murcko_scaffold(parse_smiles(s))
@@ -749,8 +749,8 @@ def test_scaffold_is_written_without_stereochemistry():
 
 
 def test_side_chains_are_stripped_but_ring_systems_and_linkers_kept():
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.scaffolds import murcko_scaffold
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.scaffolds import murcko_scaffold
 
     # Long side chains go; the biaryl linker stays.
     assert murcko_scaffold(parse_smiles("CC(C)Cc1ccc(cc1)C(C)C(=O)O")) == "c1ccccc1"
@@ -763,7 +763,7 @@ def test_exocyclic_double_bond_on_a_ring_atom_is_retained():
     stripped as normal."""
     from rdkit import Chem
 
-    from winnow.chem.scaffolds import murcko_scaffold
+    from sorbent.chem.scaffolds import murcko_scaffold
 
     assert murcko_scaffold(Chem.MolFromSmiles("O=C1CCCCC1")) == "O=C1CCCCC1"
     assert murcko_scaffold(Chem.MolFromSmiles("C1CCCCC1")) == "C1CCCCC1"
@@ -773,7 +773,7 @@ def test_exocyclic_double_bond_on_a_ring_atom_is_retained():
 def test_generic_scaffold_collapses_heteroatoms_and_aromaticity():
     from rdkit import Chem
 
-    from winnow.chem.scaffolds import generic_scaffold
+    from sorbent.chem.scaffolds import generic_scaffold
 
     for smiles in ["c1ccccc1", "C1CCCCC1", "c1ccncc1"]:
         assert generic_scaffold(Chem.MolFromSmiles(smiles)) == "C1CCCCC1"
@@ -784,7 +784,7 @@ def test_generic_scaffold_does_not_remove_exocyclic_atoms():
     distinct from the bare ring even in the generic form."""
     from rdkit import Chem
 
-    from winnow.chem.scaffolds import generic_scaffold
+    from sorbent.chem.scaffolds import generic_scaffold
 
     assert generic_scaffold(Chem.MolFromSmiles("O=C1CCCCC1")) == "CC1CCCCC1"
     assert generic_scaffold(Chem.MolFromSmiles("C1CCCCC1")) == "C1CCCCC1"
@@ -793,8 +793,8 @@ def test_generic_scaffold_does_not_remove_exocyclic_atoms():
 def test_scaffold_does_not_mutate_the_input():
     from rdkit import Chem
 
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.scaffolds import generic_scaffold, murcko_scaffold
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.scaffolds import generic_scaffold, murcko_scaffold
 
     mol = parse_smiles("CC(C)Cc1ccc(cc1)C(C)C(=O)O")
     before = Chem.MolToSmiles(mol)
@@ -821,7 +821,7 @@ def test_awkward_chemistry_yields_valid_or_absent_scaffolds(smiles):
     """Neither variant may raise, and anything returned must be parseable."""
     from rdkit import Chem
 
-    from winnow.chem.scaffolds import generic_scaffold, murcko_scaffold
+    from sorbent.chem.scaffolds import generic_scaffold, murcko_scaffold
 
     mol = Chem.MolFromSmiles(smiles)
     for result in (murcko_scaffold(mol), generic_scaffold(mol)):
@@ -833,8 +833,8 @@ def test_awkward_chemistry_yields_valid_or_absent_scaffolds(smiles):
 
 
 def test_identical_molecules_have_tanimoto_one(aspirin):
-    from winnow.chem.fingerprints import compute_fingerprint, tanimoto
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.fingerprints import compute_fingerprint, tanimoto
+    from sorbent.chem.parse import parse_smiles
 
     fp = compute_fingerprint(parse_smiles(aspirin))
     assert tanimoto(fp, fp) == pytest.approx(1.0)
@@ -843,8 +843,8 @@ def test_identical_molecules_have_tanimoto_one(aspirin):
 def test_similar_beats_dissimilar(aspirin, caffeine):
     """Aspirin is closer to salicylic acid than to caffeine. If this fails your
     fingerprint is wired up wrong."""
-    from winnow.chem.fingerprints import compute_fingerprint, tanimoto
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.fingerprints import compute_fingerprint, tanimoto
+    from sorbent.chem.parse import parse_smiles
 
     a = compute_fingerprint(parse_smiles(aspirin))
     salicylic = compute_fingerprint(parse_smiles("OC(=O)c1ccccc1O"))
@@ -853,15 +853,15 @@ def test_similar_beats_dissimilar(aspirin, caffeine):
 
 
 def test_bulk_matches_pairwise(small_library):
-    from winnow.chem.fingerprints import bulk_tanimoto, compute_fingerprint, tanimoto
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.fingerprints import bulk_tanimoto, compute_fingerprint, tanimoto
+    from sorbent.chem.parse import parse_smiles
 
     fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
     assert bulk_tanimoto(fps[0], fps[1:]) == pytest.approx([tanimoto(fps[0], f) for f in fps[1:]])
 
 
 def test_generator_is_cached_per_parameter_set():
-    from winnow.chem.fingerprints import get_generator
+    from sorbent.chem.fingerprints import get_generator
 
     assert get_generator(2, 2048) is get_generator(2, 2048)
     assert get_generator(2, 2048) is not get_generator(3, 2048)
@@ -871,8 +871,8 @@ def test_generator_is_cached_per_parameter_set():
 def test_default_radius_is_two_not_rdkits_three(aspirin):
     """GetMorganGenerator defaults to radius 3 (ECFP6). Leaving it out would
     silently give a different fingerprint from the documented ECFP4."""
-    from winnow.chem.fingerprints import compute_fingerprint
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.fingerprints import compute_fingerprint
+    from sorbent.chem.parse import parse_smiles
 
     mol = parse_smiles(aspirin)
     default = compute_fingerprint(mol).GetNumOnBits()
@@ -884,8 +884,8 @@ def test_default_radius_is_two_not_rdkits_three(aspirin):
 
 
 def test_fingerprint_honours_bit_size(aspirin):
-    from winnow.chem.fingerprints import compute_fingerprint
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.fingerprints import compute_fingerprint
+    from sorbent.chem.parse import parse_smiles
 
     mol = parse_smiles(aspirin)
     for n_bits in (512, 1024, 2048, 4096):
@@ -893,8 +893,8 @@ def test_fingerprint_honours_bit_size(aspirin):
 
 
 def test_tanimoto_is_bounded_and_symmetric(small_library):
-    from winnow.chem.fingerprints import compute_fingerprint, tanimoto
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.fingerprints import compute_fingerprint, tanimoto
+    from sorbent.chem.parse import parse_smiles
 
     fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
     for a in fps:
@@ -911,8 +911,8 @@ def test_all_zero_fingerprints_give_zero_not_nan():
 
     from rdkit.DataStructs import ExplicitBitVect
 
-    from winnow.chem.fingerprints import bulk_tanimoto, compute_fingerprint, tanimoto
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.fingerprints import bulk_tanimoto, compute_fingerprint, tanimoto
+    from sorbent.chem.parse import parse_smiles
 
     zero, other_zero = ExplicitBitVect(2048), ExplicitBitVect(2048)
     real = compute_fingerprint(parse_smiles("CCO"))
@@ -926,16 +926,16 @@ def test_all_zero_fingerprints_give_zero_not_nan():
 def test_bulk_tanimoto_handles_empty_targets(aspirin):
     """Keeps the distance-matrix builder in cluster.py free of a special case
     for its first row."""
-    from winnow.chem.fingerprints import bulk_tanimoto, compute_fingerprint
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.fingerprints import bulk_tanimoto, compute_fingerprint
+    from sorbent.chem.parse import parse_smiles
 
     assert bulk_tanimoto(compute_fingerprint(parse_smiles(aspirin)), []) == []
 
 
 def test_similarity_values_are_plain_floats(small_library):
     """Not numpy scalars - these end up in a Pydantic model and in JSON."""
-    from winnow.chem.fingerprints import bulk_tanimoto, compute_fingerprint, tanimoto
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.fingerprints import bulk_tanimoto, compute_fingerprint, tanimoto
+    from sorbent.chem.parse import parse_smiles
 
     fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
     assert type(tanimoto(fps[0], fps[1])) is float
@@ -947,8 +947,8 @@ def test_fingerprints_survive_pickling(small_library):
     two-phase split in chem/pipeline.py."""
     import pickle
 
-    from winnow.chem.fingerprints import compute_fingerprint, tanimoto
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.fingerprints import compute_fingerprint, tanimoto
+    from sorbent.chem.parse import parse_smiles
 
     fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
     restored = pickle.loads(pickle.dumps(fps))
@@ -958,8 +958,8 @@ def test_fingerprints_survive_pickling(small_library):
 def test_enantiomers_are_identical_by_default():
     """includeChirality is off, matching scaffolds.py: clustering is about
     chemotype, and configuration lives on standard_smiles."""
-    from winnow.chem.fingerprints import compute_fingerprint, tanimoto
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.fingerprints import compute_fingerprint, tanimoto
+    from sorbent.chem.parse import parse_smiles
 
     left = compute_fingerprint(parse_smiles("CN1CCC[C@H]1c1cccnc1"))
     right = compute_fingerprint(parse_smiles("CN1CCC[C@@H]1c1cccnc1"))
@@ -969,8 +969,8 @@ def test_enantiomers_are_identical_by_default():
 def test_nearest_neighbour_is_chemically_sensible():
     """Aspirin's closest neighbour among common drugs is salicylic acid, its
     own hydrolysis product. If this fails the fingerprint is wired up wrong."""
-    from winnow.chem.fingerprints import bulk_tanimoto, compute_fingerprint
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.fingerprints import bulk_tanimoto, compute_fingerprint
+    from sorbent.chem.parse import parse_smiles
 
     others = {
         "salicylic": "OC(=O)c1ccccc1O",
@@ -989,9 +989,9 @@ def test_nearest_neighbour_is_chemically_sensible():
 
 
 def test_distance_matrix_is_lower_triangle(small_library):
-    from winnow.chem.cluster import build_distance_matrix
-    from winnow.chem.fingerprints import compute_fingerprint
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.cluster import build_distance_matrix
+    from sorbent.chem.fingerprints import compute_fingerprint
+    from sorbent.chem.parse import parse_smiles
 
     n = len(small_library)
     fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
@@ -1001,9 +1001,9 @@ def test_distance_matrix_is_lower_triangle(small_library):
 
 
 def test_every_molecule_lands_in_exactly_one_cluster(small_library):
-    from winnow.chem.cluster import assign_clusters, butina_cluster
-    from winnow.chem.fingerprints import compute_fingerprint
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.cluster import assign_clusters, butina_cluster
+    from sorbent.chem.fingerprints import compute_fingerprint
+    from sorbent.chem.parse import parse_smiles
 
     fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
     clusters = butina_cluster(fps, cutoff=0.4)
@@ -1016,9 +1016,9 @@ def test_every_molecule_lands_in_exactly_one_cluster(small_library):
 
 
 def test_clusters_are_ordered_largest_first(small_library):
-    from winnow.chem.cluster import butina_cluster
-    from winnow.chem.fingerprints import compute_fingerprint
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.cluster import butina_cluster
+    from sorbent.chem.fingerprints import compute_fingerprint
+    from sorbent.chem.parse import parse_smiles
 
     fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
     sizes = [len(c) for c in butina_cluster(fps, cutoff=0.6)]
@@ -1026,7 +1026,7 @@ def test_clusters_are_ordered_largest_first(small_library):
 
 
 def test_oversized_input_is_refused_clearly():
-    from winnow.chem.cluster import MAX_EXACT_CLUSTER_SIZE, butina_cluster
+    from sorbent.chem.cluster import MAX_EXACT_CLUSTER_SIZE, butina_cluster
 
     with pytest.raises(ValueError, match="(?i)cluster"):
         butina_cluster([None] * (MAX_EXACT_CLUSTER_SIZE + 1))
@@ -1036,7 +1036,7 @@ def test_oversized_refusal_does_not_touch_the_fingerprints():
     """The list is all None. If the size check ran after any fingerprint work
     this would raise TypeError instead, and a real oversized call would spend
     minutes before failing."""
-    from winnow.chem.cluster import MAX_EXACT_CLUSTER_SIZE, butina_cluster
+    from sorbent.chem.cluster import MAX_EXACT_CLUSTER_SIZE, butina_cluster
 
     with pytest.raises(ValueError, match="(?i)refused"):
         butina_cluster([None] * (MAX_EXACT_CLUSTER_SIZE + 1))
@@ -1044,7 +1044,7 @@ def test_oversized_refusal_does_not_touch_the_fingerprints():
 
 def test_refusal_names_an_alternative():
     """A cap with no way forward is a dead end, not an error message."""
-    from winnow.chem.cluster import MAX_EXACT_CLUSTER_SIZE, butina_cluster
+    from sorbent.chem.cluster import MAX_EXACT_CLUSTER_SIZE, butina_cluster
 
     with pytest.raises(ValueError, match="(?i)scaffold|LeaderPicker|sphere"):
         butina_cluster([None] * (MAX_EXACT_CLUSTER_SIZE + 1))
@@ -1052,9 +1052,9 @@ def test_refusal_names_an_alternative():
 
 @pytest.mark.parametrize(("n", "expected"), [(0, []), (1, [[0]])])
 def test_degenerate_sizes(n, expected, small_library):
-    from winnow.chem.cluster import butina_cluster
-    from winnow.chem.fingerprints import compute_fingerprint
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.cluster import butina_cluster
+    from sorbent.chem.fingerprints import compute_fingerprint
+    from sorbent.chem.parse import parse_smiles
 
     fps = [compute_fingerprint(parse_smiles(s)) for s in small_library[:n]]
     assert butina_cluster(fps) == expected
@@ -1065,9 +1065,9 @@ def test_distance_matrix_is_float32_not_a_python_list(small_library):
     20,000 cap - a promise the code could not keep."""
     import numpy as np
 
-    from winnow.chem.cluster import build_distance_matrix
-    from winnow.chem.fingerprints import compute_fingerprint
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.cluster import build_distance_matrix
+    from sorbent.chem.fingerprints import compute_fingerprint
+    from sorbent.chem.parse import parse_smiles
 
     fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
     matrix = build_distance_matrix(fps)
@@ -1078,9 +1078,9 @@ def test_distance_matrix_is_float32_not_a_python_list(small_library):
 def test_distance_matrix_layout_matches_pairwise_tanimoto(small_library):
     """Row-major lower triangle: for molecule i, distances to 0..i-1. Get this
     wrong and clustering silently groups the wrong molecules."""
-    from winnow.chem.cluster import build_distance_matrix
-    from winnow.chem.fingerprints import compute_fingerprint, tanimoto
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.cluster import build_distance_matrix
+    from sorbent.chem.fingerprints import compute_fingerprint, tanimoto
+    from sorbent.chem.parse import parse_smiles
 
     fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
     matrix = build_distance_matrix(fps)
@@ -1095,9 +1095,9 @@ def test_chemical_families_cluster_together():
     """Three salicylates, two xanthines, two profens and one unrelated base.
     If the distance matrix were transposed or misaligned this would scramble.
     """
-    from winnow.chem.cluster import butina_cluster
-    from winnow.chem.fingerprints import compute_fingerprint
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.cluster import butina_cluster
+    from sorbent.chem.fingerprints import compute_fingerprint
+    from sorbent.chem.parse import parse_smiles
 
     families = {
         "salicylate": ["CC(=O)Oc1ccccc1C(=O)O", "OC(=O)c1ccccc1O", "CC(=O)Oc1ccccc1C(=O)OC"],
@@ -1116,11 +1116,11 @@ def test_chemical_families_cluster_together():
 
 
 def test_centroid_is_the_most_central_member():
-    """Butina puts the centroid first, and Winnow's contract preserves that
+    """Butina puts the centroid first, and Sorbent's contract preserves that
     through the largest-first sort."""
-    from winnow.chem.cluster import butina_cluster
-    from winnow.chem.fingerprints import compute_fingerprint, tanimoto
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.cluster import butina_cluster
+    from sorbent.chem.fingerprints import compute_fingerprint, tanimoto
+    from sorbent.chem.parse import parse_smiles
 
     fps = [
         compute_fingerprint(parse_smiles(s))
@@ -1134,9 +1134,9 @@ def test_centroid_is_the_most_central_member():
 def test_clustering_is_deterministic(small_library):
     """as_completed reorders chunks upstream; a clustering that varied run to
     run would make the whole report non-reproducible."""
-    from winnow.chem.cluster import butina_cluster
-    from winnow.chem.fingerprints import compute_fingerprint
-    from winnow.chem.parse import parse_smiles
+    from sorbent.chem.cluster import butina_cluster
+    from sorbent.chem.fingerprints import compute_fingerprint
+    from sorbent.chem.parse import parse_smiles
 
     fps = [compute_fingerprint(parse_smiles(s)) for s in small_library]
     runs = {tuple(tuple(c) for c in butina_cluster(fps, cutoff=0.5)) for _ in range(5)}
@@ -1144,14 +1144,14 @@ def test_clustering_is_deterministic(small_library):
 
 
 def test_assign_clusters_rejects_out_of_range_index():
-    from winnow.chem.cluster import assign_clusters
+    from sorbent.chem.cluster import assign_clusters
 
     with pytest.raises(ValueError, match="outside"):
         assign_clusters([[0, 99]], 3)
 
 
 def test_assign_clusters_rejects_a_molecule_in_two_clusters():
-    from winnow.chem.cluster import assign_clusters
+    from sorbent.chem.cluster import assign_clusters
 
     with pytest.raises(ValueError, match="both cluster"):
         assign_clusters([[0, 1], [1, 2]], 3)
@@ -1160,14 +1160,14 @@ def test_assign_clusters_rejects_a_molecule_in_two_clusters():
 def test_assign_clusters_rejects_incomplete_coverage():
     """Butina partitions completely. Holes would surface much later as a null
     cluster_id on an arbitrary molecule."""
-    from winnow.chem.cluster import assign_clusters
+    from sorbent.chem.cluster import assign_clusters
 
     with pytest.raises(ValueError, match="no cluster"):
         assign_clusters([[0]], 3)
 
 
 def test_assign_clusters_handles_empty():
-    from winnow.chem.cluster import assign_clusters
+    from sorbent.chem.cluster import assign_clusters
 
     assert assign_clusters([], 0) == []
 
@@ -1176,9 +1176,9 @@ def test_assign_clusters_handles_empty():
 
 
 def test_score_is_bounded_regardless_of_weights(aspirin):
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.score import composite_score
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.score import composite_score
 
     desc = compute_descriptors(parse_smiles(aspirin))
     for weights in (
@@ -1197,9 +1197,9 @@ def test_score_is_bounded_regardless_of_weights(aspirin):
 
 
 def test_alerts_lower_the_score(aspirin):
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.score import composite_score
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.score import composite_score
 
     desc = compute_descriptors(parse_smiles(aspirin))
     weights = {"rule_compliance": 1.0, "alert_penalty": 1.0}
@@ -1210,9 +1210,9 @@ def test_alerts_lower_the_score(aspirin):
 
 def test_breakdown_reports_unweighted_components(aspirin):
     """The caller must be able to see why a molecule scored what it did."""
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.score import composite_score
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.score import composite_score
 
     desc = compute_descriptors(parse_smiles(aspirin))
     _, breakdown = composite_score(desc, [], 0, {"rule_compliance": 1.0, "alert_penalty": 1.0})
@@ -1227,13 +1227,13 @@ def test_breakdown_reports_unweighted_components(aspirin):
 def test_alert_penalty_decays_reciprocally(n_alerts, expected):
     """The first hit costs half; the sixth barely moves it. That matches how
     an alert list actually reads."""
-    from winnow.chem.score import alert_penalty
+    from sorbent.chem.score import alert_penalty
 
     assert alert_penalty(n_alerts) == pytest.approx(expected)
 
 
 def test_alert_penalty_rejects_negative():
-    from winnow.chem.score import alert_penalty
+    from sorbent.chem.score import alert_penalty
 
     with pytest.raises(ValueError, match="negative"):
         alert_penalty(-1)
@@ -1242,13 +1242,13 @@ def test_alert_penalty_rejects_negative():
 def test_rule_compliance_is_one_when_nothing_was_requested():
     """No evidence against is not evidence for, but penalising a molecule for
     a question nobody asked would be worse."""
-    from winnow.chem.score import rule_compliance
+    from sorbent.chem.score import rule_compliance
 
     assert rule_compliance([]) == 1.0
 
 
 def test_rule_compliance_is_the_pass_fraction():
-    from winnow.chem.score import rule_compliance
+    from sorbent.chem.score import rule_compliance
 
     rules = [{"passed": True}, {"passed": False}, {"passed": True}, {"passed": False}]
     assert rule_compliance(rules) == 0.5
@@ -1257,7 +1257,7 @@ def test_rule_compliance_is_the_pass_fraction():
 
 
 def test_property_centrality_peaks_at_the_targets():
-    from winnow.chem.score import (
+    from sorbent.chem.score import (
         TARGET_CLOGP,
         TARGET_MW,
         TARGET_TPSA,
@@ -1277,7 +1277,7 @@ def test_property_centrality_peaks_at_the_targets():
 def test_property_centrality_is_a_product_not_a_mean():
     """Being badly wrong on one axis should sink the component regardless of
     the other two, the way a chemist reads it."""
-    from winnow.chem.score import TARGET_CLOGP, TARGET_MW, TARGET_TPSA, property_centrality
+    from sorbent.chem.score import TARGET_CLOGP, TARGET_MW, TARGET_TPSA, property_centrality
 
     perfect = {"molecular_weight": TARGET_MW, "clogp": TARGET_CLOGP, "tpsa": TARGET_TPSA}
     one_bad = dict(perfect, clogp=TARGET_CLOGP + 8)
@@ -1285,7 +1285,7 @@ def test_property_centrality_is_a_product_not_a_mean():
 
 
 def test_complexity_penalty_ignores_an_ordinary_ring_count():
-    from winnow.chem.score import COMFORTABLE_RINGS, complexity_penalty
+    from sorbent.chem.score import COMFORTABLE_RINGS, complexity_penalty
 
     for rings in range(COMFORTABLE_RINGS + 1):
         assert complexity_penalty({"rings": rings, "unassigned_stereocentres": 0}) == 1.0
@@ -1294,7 +1294,7 @@ def test_complexity_penalty_ignores_an_ordinary_ring_count():
 
 def test_complexity_penalty_punishes_undefined_stereo():
     """A vendor who has not defined a centre cannot sell you one enantiomer."""
-    from winnow.chem.score import complexity_penalty
+    from sorbent.chem.score import complexity_penalty
 
     clean = complexity_penalty({"rings": 1, "unassigned_stereocentres": 0})
     messy = complexity_penalty({"rings": 1, "unassigned_stereocentres": 4})
@@ -1305,9 +1305,9 @@ def test_complexity_penalty_punishes_undefined_stereo():
 def test_composite_rejects_unknown_component_name(aspirin):
     """A typo that silently dropped a component would be the worst kind of bug
     in a file that decides an ordering."""
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.score import composite_score
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.score import composite_score
 
     desc = compute_descriptors(parse_smiles(aspirin))
     with pytest.raises(KeyError, match="unknown score component"):
@@ -1315,9 +1315,9 @@ def test_composite_rejects_unknown_component_name(aspirin):
 
 
 def test_composite_rejects_negative_and_empty_weights(aspirin):
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.score import composite_score
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.score import composite_score
 
     desc = compute_descriptors(parse_smiles(aspirin))
     with pytest.raises(ValueError, match="negative"):
@@ -1331,9 +1331,9 @@ def test_composite_rejects_negative_and_empty_weights(aspirin):
 def test_breakdown_mirrors_the_weights_exactly(aspirin):
     """So the caller can reproduce the arithmetic, and so no descriptor is
     demanded for a component nobody asked for."""
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.score import composite_score
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.score import composite_score
 
     desc = compute_descriptors(parse_smiles(aspirin))
     weights = {"rule_compliance": 2.0, "alert_penalty": 1.0}
@@ -1348,7 +1348,7 @@ def test_breakdown_mirrors_the_weights_exactly(aspirin):
 
 def test_composite_needs_no_descriptors_for_unweighted_components():
     """rule_compliance and alert_penalty do not touch desc at all."""
-    from winnow.chem.score import composite_score
+    from sorbent.chem.score import composite_score
 
     score, breakdown = composite_score({}, [], 2, {"alert_penalty": 1.0})
     assert score == pytest.approx(1 / 3)
@@ -1358,12 +1358,12 @@ def test_composite_needs_no_descriptors_for_unweighted_components():
 def test_score_ranks_real_drugs_above_junk():
     """The point of the whole file. Uses lower-bounded Ghose and a MW window,
     which is how the limitation below is meant to be handled."""
-    from winnow.chem.alerts import find_alerts
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.rules import evaluate
-    from winnow.chem.score import composite_score
-    from winnow.schemas.filters import AlertCatalog, RuleSet
+    from sorbent.chem.alerts import find_alerts
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.rules import evaluate
+    from sorbent.chem.score import composite_score
+    from sorbent.schemas.filters import AlertCatalog, RuleSet
 
     weights = {
         "rule_compliance": 1.0,
@@ -1402,7 +1402,7 @@ def test_geometric_mean_sinks_a_near_zero_component():
     arithmetic mean the fourth was outvoted and water scored 0.821 - above
     aspirin. Geometrically the near-zero property_centrality drags it down.
     """
-    from winnow.chem.score import composite_score
+    from sorbent.chem.score import composite_score
 
     water = {
         "molecular_weight": 18.0,
@@ -1426,7 +1426,7 @@ def test_composite_score_is_a_weighted_geometric_mean():
     """Pins the aggregation itself, so a change to it is deliberate."""
     import math
 
-    from winnow.chem.score import composite_score
+    from sorbent.chem.score import composite_score
 
     desc = {"molecular_weight": 350.0, "clogp": 2.5, "tpsa": 75.0}
     weights = {"property_centrality": 3.0, "alert_penalty": 1.0}
@@ -1446,7 +1446,7 @@ def test_config_defaults_are_isolated_between_instances():
     """TriageConfig uses mutable `default=` rather than default_factory, so
     that the defaults appear in the generated OpenAPI schema. Pydantic v2
     deep-copies them per instance; this pins that it keeps doing so."""
-    from winnow.schemas.filters import RuleSet, TriageConfig
+    from sorbent.schemas.filters import RuleSet, TriageConfig
 
     first = TriageConfig()
     first.rule_sets.append(RuleSet.EGAN)
@@ -1462,7 +1462,7 @@ def test_config_defaults_are_isolated_between_instances():
 def test_config_defaults_are_visible_in_the_openapi_schema():
     """default_factory does not serialise into JSON Schema, so the API docs
     would advertise no defaults at all."""
-    from winnow.schemas.filters import TriageConfig
+    from sorbent.schemas.filters import TriageConfig
 
     properties = TriageConfig.model_json_schema()["properties"]
     assert properties["rule_sets"]["default"] == ["veber"]
@@ -1481,7 +1481,7 @@ def test_default_score_weights_exclude_rule_compliance():
     0.172, and trivially small molecules drop too, because passing rules they
     cannot fail no longer earns them a free 1.00.
     """
-    from winnow.schemas.filters import TriageConfig
+    from sorbent.schemas.filters import TriageConfig
 
     weights = TriageConfig().score_weights
     assert "rule_compliance" not in weights
@@ -1491,8 +1491,8 @@ def test_default_score_weights_exclude_rule_compliance():
 def test_rules_are_still_evaluated_and_reported_by_default():
     """Dropping the weight must not drop the evidence - a chemist still needs
     to see which rules a molecule broke and by how much."""
-    from winnow.chem.pipeline import finalize, process_chunk
-    from winnow.schemas.filters import TriageConfig
+    from sorbent.chem.pipeline import finalize, process_chunk
+    from sorbent.schemas.filters import TriageConfig
 
     config = TriageConfig()
     records = [
@@ -1516,11 +1516,11 @@ def test_rules_are_still_evaluated_and_reported_by_default():
 
 def test_dropping_the_component_lifts_rule_failing_drugs_and_lowers_trivia():
     """The measured reason for the default. Both effects at once."""
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.rules import evaluate
-    from winnow.chem.score import composite_score
-    from winnow.schemas.filters import RuleSet, TriageConfig
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.rules import evaluate
+    from sorbent.chem.score import composite_score
+    from sorbent.schemas.filters import RuleSet, TriageConfig
 
     without = TriageConfig().score_weights
     with_it = dict(without, rule_compliance=1.0)
@@ -1548,7 +1548,7 @@ def test_default_rule_sets_exclude_lipinski():
     including every macrolide and most peptidomimetics. Requesting it by
     default would bury whole legitimate series.
     """
-    from winnow.schemas.filters import RuleSet, TriageConfig
+    from sorbent.schemas.filters import RuleSet, TriageConfig
 
     assert TriageConfig().rule_sets == [RuleSet.VEBER]
     assert RuleSet.LIPINSKI not in TriageConfig().rule_sets
@@ -1562,11 +1562,11 @@ def test_trimming_rule_sets_does_not_rescue_a_molecule_that_fails_the_rest():
     molecule failing everything is removing the component - either
     rule_sets=[] or leaving rule_compliance out of score_weights.
     """
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.rules import evaluate
-    from winnow.chem.score import composite_score
-    from winnow.schemas.filters import RuleSet, TriageConfig
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.rules import evaluate
+    from sorbent.chem.score import composite_score
+    from sorbent.schemas.filters import RuleSet, TriageConfig
 
     # Not the default weights - rule_compliance is no longer in them. This
     # pins what happens to a caller who puts it back.
@@ -1597,11 +1597,11 @@ def test_a_single_rule_set_removes_partial_credit():
     """Only relevant when rule_compliance is weighted, which by default it is
     not. With one rule set rule_compliance is binary {0, 1}, so a molecule
     failing by a hair loses the 0.5 a second rule set would have earned it."""
-    from winnow.chem.descriptors import compute_descriptors
-    from winnow.chem.parse import parse_smiles
-    from winnow.chem.rules import evaluate
-    from winnow.chem.score import composite_score
-    from winnow.schemas.filters import RuleSet, TriageConfig
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.rules import evaluate
+    from sorbent.chem.score import composite_score
+    from sorbent.schemas.filters import RuleSet, TriageConfig
 
     weights = dict(TriageConfig().score_weights, rule_compliance=1.0)
     # Passes Lipinski, fails Veber on TPSA 142.7 against a limit of 140.
@@ -1626,7 +1626,7 @@ def test_zero_component_is_severe_but_not_annihilating():
     bottom. That is the aggregation doing what it was told, but it makes the
     choice of rule_sets consequential - see the module docstring.
     """
-    from winnow.chem.score import composite_score
+    from sorbent.chem.score import composite_score
 
     desc = {"molecular_weight": 350.0, "clogp": 2.5, "tpsa": 75.0}
     weights = {"rule_compliance": 1.0, "property_centrality": 1.0}

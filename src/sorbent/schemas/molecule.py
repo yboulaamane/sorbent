@@ -19,7 +19,7 @@ class InputRecord(BaseModel):
     smiles: str = Field(description="SMILES exactly as submitted, unmodified.")
     identifier: str | None = Field(
         default=None,
-        description="Caller's own ID. Winnow never invents one; if this is "
+        description="Caller's own ID. Sorbent never invents one; if this is "
         "None the index in the submitted list is used.",
     )
 
@@ -70,7 +70,7 @@ class Alert(BaseModel):
 
 
 class TriagedMolecule(BaseModel):
-    """Everything Winnow has to say about one molecule."""
+    """Everything Sorbent has to say about one molecule."""
 
     identifier: str
     input_smiles: str
