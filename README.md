@@ -36,12 +36,12 @@ other descriptor is exact given the structure.
 
 ## Status
 
-**Complete and working.** All 211 tests pass; `ruff`, `ruff format` and `mypy`
+**Complete and working.** All 221 tests pass; `ruff`, `ruff format` and `mypy`
 are clean.
 
 ```bash
 make install
-make test        # 211 passed
+make test        # 221 passed
 make run         # http://localhost:8000/docs
 ```
 
@@ -173,17 +173,17 @@ one never awaits, precisely so that swap costs nothing.
 Nine modules under [`src/sorbent/chem/`](src/sorbent/chem/), each documenting the
 algorithm, the RDKit calls and the traps found while building it:
 
-| # | Module | What it does | Watch out for |
-|---|---|---|---|
-| 1 | ~~`parse.py`~~ **done** | SMILES → sanitised, standardised mol + InChIKey | — |
-| 2 | ~~`descriptors.py`~~ **done** | MW, clogP, TPSA, HBD/HBA, RotB, Fsp3, stereo | — |
-| 3 | ~~`rules.py`~~ **done** | Lipinski, Veber, Egan, Ghose, lead-like, Ro3 | — |
-| 4 | ~~`alerts.py`~~ **done** | PAINS / BRENK / NIH via RDKit `FilterCatalog` | — |
-| 5 | ~~`scaffolds.py`~~ **done** | Bemis–Murcko | — |
-| 6 | ~~`fingerprints.py`~~ **done** | ECFP4 + Tanimoto | — |
-| 7 | ~~`cluster.py`~~ **done** | Butina | — |
-| 8 | ~~`score.py`~~ **done** | Composite score + breakdown | — |
-| 9 | ~~`pipeline.py`~~ **done** | Composes 1–8 across the two phases | — |
+| Module | What it does |
+|---|---|
+| [`parse.py`](src/sorbent/chem/parse.py) | SMILES → sanitised, standardised molecule + InChIKey |
+| [`descriptors.py`](src/sorbent/chem/descriptors.py) | MW, clogP, TPSA, HBD/HBA, rotatable bonds, Fsp3, stereo |
+| [`rules.py`](src/sorbent/chem/rules.py) | Lipinski, Veber, Egan, Ghose, lead-like, Ro3 |
+| [`alerts.py`](src/sorbent/chem/alerts.py) | PAINS / BRENK / NIH / ZINC via RDKit `FilterCatalog` |
+| [`scaffolds.py`](src/sorbent/chem/scaffolds.py) | Bemis–Murcko, plain and generic |
+| [`fingerprints.py`](src/sorbent/chem/fingerprints.py) | ECFP4 and Tanimoto similarity |
+| [`cluster.py`](src/sorbent/chem/cluster.py) | Butina clustering, capped and refusing clearly above it |
+| [`score.py`](src/sorbent/chem/score.py) | Composite score and its per-component breakdown |
+| [`pipeline.py`](src/sorbent/chem/pipeline.py) | Composes the rest across the two phases |
 
 ```bash
 make test-chem                             # the science layer
@@ -489,11 +489,11 @@ src/sorbent/
   jobs/
     store.py           JobStore ABC + in-memory implementation
     runner.py          async supervisor over the process pool
-  chem/                ← the stubs. No FastAPI imports allowed here.
+  chem/                the science layer. No FastAPI imports allowed here.
 tests/
-  test_api_*.py        pass today
-  test_jobs_store.py   pass today
-  test_chem_*.py       the spec
+  test_api_*.py        the HTTP contract
+  test_jobs_store.py   the JobStore contract, for swapping in Redis later
+  test_chem_*.py       the science, 194 of the 221
 ```
 
 `chem/` deliberately imports nothing from FastAPI: it must stay usable from a
