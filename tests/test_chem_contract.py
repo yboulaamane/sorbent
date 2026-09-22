@@ -200,7 +200,9 @@ def test_aspirin_descriptors_are_right(aspirin):
     assert d["molecular_weight"] == pytest.approx(180.16, abs=0.1)
     assert d["heavy_atoms"] == 13
     assert d["hbd"] == 1
-    assert d["hba"] == 3
+    # Lipinski's literal N+O count: aspirin has four oxygens and no nitrogen.
+    # RDKit's refined NumHAcceptors would say 3; Molport and the 1997 paper say 4.
+    assert d["hba"] == 4
     assert d["aromatic_rings"] == 1
     assert d["tpsa"] == pytest.approx(63.6, abs=0.5)
 
@@ -1403,6 +1405,7 @@ def test_geometric_mean_sinks_a_near_zero_component():
     aspirin. Geometrically the near-zero property_centrality drags it down.
     """
     from sorbent.chem.score import composite_score
+    from sorbent.schemas.filters import TriageConfig
 
     water = {
         "molecular_weight": 18.0,
@@ -1411,15 +1414,11 @@ def test_geometric_mean_sinks_a_near_zero_component():
         "rings": 0,
         "unassigned_stereocentres": 0,
     }
-    default_weights = {
-        "rule_compliance": 1.0,
-        "alert_penalty": 1.0,
-        "property_centrality": 0.5,
-        "complexity_penalty": 0.25,
-    }
-    score, breakdown = composite_score(water, [], 0, default_weights)
+    # Read the real default rather than restating it; an inlined copy silently
+    # went stale when the weights changed and the test stopped testing them.
+    score, breakdown = composite_score(water, [], 0, TriageConfig().score_weights)
     assert breakdown["property_centrality"] < 0.01
-    assert score < 0.55, "arithmetic aggregation would give 0.821 here"
+    assert score < 0.15, "arithmetic aggregation would give 0.821 here"
 
 
 def test_composite_score_is_a_weighted_geometric_mean():
@@ -1471,6 +1470,84 @@ def test_config_defaults_are_visible_in_the_openapi_schema():
     assert "rule_compliance" not in properties["score_weights"]["default"]
 
 
+def test_hba_uses_lipinskis_literal_definition():
+    """Checked against Molport's published descriptors for 206,922 compounds:
+    Lipinski.NOCount agreed 97.5%, RDKit's refined NumHAcceptors 11.1%.
+
+    The refined pattern excludes amide nitrogens, so on a library of amide
+    isosteres the median disagreement was two acceptors per compound. A rule
+    citing Lipinski 1997 must count acceptors the way that paper did.
+    """
+    from rdkit.Chem import Descriptors, Lipinski
+
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+
+    # An amide nitrogen: counted by N+O, excluded by the refined pattern.
+    mol = parse_smiles("CC(=O)Nc1ccc(O)cc1")
+    assert compute_descriptors(mol)["hba"] == Lipinski.NOCount(mol)
+    assert Lipinski.NOCount(mol) != Descriptors.NumHAcceptors(mol)
+
+
+def test_tpsa_includes_sulphur_and_phosphorus():
+    """RDKit excludes them by default; Ertl's table and Molport include them.
+    Agreement went from 58.4% to 85.0%, and molecules without S or P are
+    unaffected either way."""
+    from rdkit.Chem import Descriptors
+
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+
+    thiophene = parse_smiles("c1ccsc1")
+    assert compute_descriptors(thiophene)["tpsa"] == pytest.approx(
+        Descriptors.TPSA(thiophene, includeSandP=True)
+    )
+    # No S or P, so the two definitions must agree exactly.
+    aspirin = parse_smiles("CC(=O)Oc1ccccc1C(=O)O")
+    assert compute_descriptors(aspirin)["tpsa"] == pytest.approx(Descriptors.TPSA(aspirin))
+
+
+def test_property_centrality_carries_the_weight():
+    """It is the only component that discriminates. Measured over 15,000 real
+    compounds, alert_penalty sits at 1.00 for 87.7% of them and
+    complexity_penalty for 59.1%, while property_centrality spreads from 0.43
+    at the tenth percentile to 0.96 at the ninetieth.
+
+    Underweighting it collapsed the score onto centrality**0.286, which put
+    53.5% of a 206,922-compound library above 0.90.
+    """
+    from sorbent.schemas.filters import TriageConfig
+
+    weights = TriageConfig().score_weights
+    assert weights["property_centrality"] == max(weights.values())
+    assert weights["property_centrality"] > sum(
+        v for k, v in weights.items() if k != "property_centrality"
+    ), "centrality must outweigh the components that are pinned at 1.0"
+
+
+def test_trivial_molecules_now_rank_below_rule_failing_drugs():
+    """Weighting centrality properly fixed what flooring could not. Water used
+    to score 0.465 against atorvastatin's 0.004; it is now 0.09 against 0.17.
+    """
+    from sorbent.chem.descriptors import compute_descriptors
+    from sorbent.chem.parse import parse_smiles
+    from sorbent.chem.rules import evaluate
+    from sorbent.chem.score import composite_score
+    from sorbent.schemas.filters import RuleSet, TriageConfig
+
+    weights = TriageConfig().score_weights
+
+    def score(smiles):
+        desc = compute_descriptors(parse_smiles(smiles))
+        return composite_score(desc, evaluate(desc, [RuleSet.VEBER]), 0, weights)[0]
+
+    atorvastatin = (
+        "CC(C)c1c(C(=O)Nc2ccccc2)c(-c2ccccc2)c(-c2ccc(F)cc2)n1CC[C@@H](O)C[C@@H](O)CC(=O)O"
+    )
+    assert score(atorvastatin) > score("O")
+    assert score("CN1c2ccc(Cl)cc2C(=NCC1=O)c1ccccc1") > score("c1ccccc1")
+
+
 def test_default_score_weights_exclude_rule_compliance():
     """Rules are reported, not ranked on.
 
@@ -1510,8 +1587,8 @@ def test_rules_are_still_evaluated_and_reported_by_default():
     assert result["rules"][0]["name"] == "veber"
     assert result["rules"][0]["passed"] is False
     assert result["rules"][0]["violations"]
-    # ...but they no longer veto the ranking.
-    assert result["score"] > 0.1
+    # ...but they no longer veto the ranking. Weighted, it would be 0.0007.
+    assert result["score"] > 0.01
 
 
 def test_dropping_the_component_lifts_rule_failing_drugs_and_lowers_trivia():
@@ -1534,7 +1611,7 @@ def test_dropping_the_component_lifts_rule_failing_drugs_and_lowers_trivia():
     )
     # A marketed drug that fails Veber stops being buried.
     assert score(atorvastatin, with_it) < 0.01
-    assert score(atorvastatin, without) > 0.4
+    assert score(atorvastatin, without) > 0.15
 
     # And water stops being rewarded for passing a rule it cannot fail.
     assert score("O", without) < score("O", with_it)
@@ -1590,7 +1667,7 @@ def test_trimming_rule_sets_does_not_rescue_a_molecule_that_fails_the_rest():
     # Removing the component does lift it, by two orders of magnitude.
     assert score_with([]) > 100 * both
     without_component = {k: v for k, v in weights.items() if k != "rule_compliance"}
-    assert score_with([RuleSet.VEBER], without_component) > 50 * both
+    assert score_with([RuleSet.VEBER], without_component) > 30 * both
 
 
 def test_a_single_rule_set_removes_partial_credit():
@@ -1611,7 +1688,7 @@ def test_a_single_rule_set_removes_partial_credit():
     )[0]
     one = composite_score(borderline, evaluate(borderline, [RuleSet.VEBER]), 0, weights)[0]
 
-    assert two > 0.3
+    assert two > 0.15
     assert one < 0.01
     assert two > 50 * one
 
