@@ -1,26 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 112" width="440" height="112" role="img" aria-label="Sorbent — compound triage">
-  <g transform="translate(18 6) scale(1.56)">
-  <defs>
-    <clipPath id="lane-light">
-      <rect x="25" y="4" width="14" height="56" rx="3"/>
-    </clipPath>
-    <linearGradient id="held-light" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%"   stop-color="#A9761B" stop-opacity="0.32"/>
-      <stop offset="30%"  stop-color="#A9761B" stop-opacity="1"/>
-      <stop offset="70%"  stop-color="#A9761B" stop-opacity="1"/>
-      <stop offset="100%" stop-color="#A9761B" stop-opacity="0.32"/>
-    </linearGradient>
-  </defs>
-  <rect x="25" y="4" width="14" height="56" rx="3" fill="#0B1220" fill-opacity="0.05"/>
-  <g clip-path="url(#lane-light)">
-    <rect x="25" y="12.5" width="14" height="8" fill="url(#held-light)"/>
-    <rect x="25" y="31" width="14" height="5.5" fill="#0B1220" fill-opacity="0.30"/>
-    <rect x="25" y="45" width="14" height="4" fill="#0B1220" fill-opacity="0.15"/>
-  </g>
-  <rect x="25" y="4" width="14" height="56" rx="3" fill="none" stroke="#0B1220A0" stroke-width="0.9"/>
-  </g>
-  <text x="128" y="60" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="37" font-weight="300"
-        letter-spacing="1.9" fill="#0B1220">Sorbent</text>
-  <text x="131" y="82" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="500"
-        letter-spacing="3.8" fill="#64748B">COMPOUND TRIAGE</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 212 80" width="212" height="80" role="img" aria-label="Sorbent — compound triage">
+  <text x="4" y="34" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="28" font-weight="400"
+        letter-spacing="9" fill="#0B1220">SORBENT</text>
+  <path d="M6 48 H156" stroke="#0B1220" stroke-opacity="0.16" stroke-width="1.4" stroke-linecap="round"/>
+  <path d="M6 48 H44" stroke="#A9761B" stroke-width="2.4" stroke-linecap="round"/>
+  <text x="6" y="70" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="400"
+        letter-spacing="3.6" fill="#64748B">compound triage</text>
 </svg>
