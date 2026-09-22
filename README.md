@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo-dark.svg">
-    <img alt="Sorbent — compound triage" src="docs/brand/logo-light.svg" width="260">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/yboulaamane/sorbent/main/docs/brand/logo-dark.svg">
+    <img alt="Sorbent — compound triage" src="https://raw.githubusercontent.com/yboulaamane/sorbent/main/docs/brand/logo-light.svg" width="260">
   </picture>
 </p>
 
