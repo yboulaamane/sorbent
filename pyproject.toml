@@ -8,8 +8,13 @@ version = "0.1.0"
 description = "A compound triage service: submit a SMILES library, get back a ranked, deduplicated, liability-flagged shortlist."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
-authors = [{ name = "Yassir" }]
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = [
+    "cheminformatics", "drug-discovery", "rdkit", "compound-triage",
+    "virtual-screening", "admet", "pains", "clustering", "fastapi",
+]
+authors = [{ name = "Yassir Boulaamane", email = "yassirxmail@gmail.com" }]
 
 dependencies = [
     "fastapi>=0.115",
@@ -30,6 +35,11 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
 ]
+
+[project.urls]
+Homepage = "https://github.com/yboulaamane/sorbent"
+Repository = "https://github.com/yboulaamane/sorbent"
+Issues = "https://github.com/yboulaamane/sorbent/issues"
 
 [project.scripts]
 sorbent = "sorbent.__main__:main"
