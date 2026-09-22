@@ -1489,22 +1489,55 @@ def test_hba_uses_lipinskis_literal_definition():
     assert Lipinski.NOCount(mol) != Descriptors.NumHAcceptors(mol)
 
 
-def test_tpsa_includes_sulphur_and_phosphorus():
-    """RDKit excludes them by default; Ertl's table and Molport include them.
-    Agreement went from 58.4% to 85.0%, and molecules without S or P are
-    unaffected either way."""
+def test_tpsa_follows_ertls_convention_excluding_sulphur_and_phosphorus():
+    """Regression against chasing one vendor's numbers.
+
+    Molport includes S and P, and switching to includeSandP=True raised
+    agreement with their catalogue from 58.4% to 85.0%. But RDKit ships
+    reference values in Data/NCI/first_5k.tpsa.csv computed with Ertl's own
+    contrib tpsa.c, and over the 1,028 of those containing S or P the default
+    agrees 100% while includeSandP=True agrees 0.4%. The canonical
+    implementation excludes them; the vendor is the outlier.
+    """
     from rdkit.Chem import Descriptors
 
     from sorbent.chem.descriptors import compute_descriptors
     from sorbent.chem.parse import parse_smiles
 
     thiophene = parse_smiles("c1ccsc1")
-    assert compute_descriptors(thiophene)["tpsa"] == pytest.approx(
+    assert compute_descriptors(thiophene)["tpsa"] == pytest.approx(Descriptors.TPSA(thiophene))
+    assert compute_descriptors(thiophene)["tpsa"] != pytest.approx(
         Descriptors.TPSA(thiophene, includeSandP=True)
     )
-    # No S or P, so the two definitions must agree exactly.
-    aspirin = parse_smiles("CC(=O)Oc1ccccc1C(=O)O")
-    assert compute_descriptors(aspirin)["tpsa"] == pytest.approx(Descriptors.TPSA(aspirin))
+
+
+def test_tpsa_matches_rdkits_ertl_reference_data():
+    """The reference RDKit validates its own implementation against."""
+    import csv
+    import pathlib as _pathlib
+
+    import rdkit
+    from rdkit import Chem
+
+    from sorbent.chem.descriptors import compute_descriptors
+
+    ref = _pathlib.Path(rdkit.__file__).parent / "Data" / "NCI" / "first_5k.tpsa.csv"
+    if not ref.exists():
+        pytest.skip("RDKit reference TPSA data not installed")
+
+    checked = 0
+    with ref.open() as fh:
+        for row in csv.reader(fh):
+            if len(row) < 2 or row[0].startswith("#"):
+                continue
+            mol = Chem.MolFromSmiles(row[0])
+            if mol is None or not any(a.GetSymbol() in ("S", "P") for a in mol.GetAtoms()):
+                continue
+            assert compute_descriptors(mol)["tpsa"] == pytest.approx(float(row[1]), abs=0.1)
+            checked += 1
+            if checked >= 200:
+                break
+    assert checked >= 50, "expected some S/P-containing reference molecules"
 
 
 def test_property_centrality_carries_the_weight():

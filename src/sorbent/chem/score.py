@@ -110,6 +110,16 @@ vary. Underweighted at 0.5 of 1.75, the score collapsed to centrality**0.286
 and put 53.5% of a 206,922-compound library above 0.90 - not wrong, but
 unreadable, and impossible to threshold on.
 
+How much of that was the library rather than the weights is worth stating,
+because the numbers above come from one chemically homogeneous set. Repeated on
+30,000 diverse PubChem structures, alert_penalty sits at 1.00 for only 44.7%
+rather than 88.3%, so the old weights were far less compressed there to begin
+with - 13.3% above 0.90 rather than 53.5%. The new weights still improve it
+(6.2% above 0.90, p10-p90 spread 0.700 against 0.662), so the change holds in
+direction on both sets. But the severity that motivated it was specific to a
+drug-like, alert-poor library, and a set with more liabilities in it would have
+shown a milder problem.
+
 Weighting centrality above the other two together also fixed something
 flooring could not: water fell from 0.465 to 0.090, below atorvastatin at
 0.174. Be clear about what that did and did not change, though - the reordering

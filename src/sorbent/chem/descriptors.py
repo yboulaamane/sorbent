@@ -38,17 +38,34 @@ peptidomimetics:
     HBD   Descriptors.NumHDonors                             95.6% agreement
     HBD   Lipinski.NHOHCount, the paper's "OH plus NH"       91.5% agreement
 
-So each field uses whichever definition the rest of the field actually uses.
-The HBA gap is not marginal: RDKit's refined pattern excludes amide nitrogens,
-and a library of amide isosteres is made of them, which put the median
-disagreement at two acceptors per compound. A rule that cites Lipinski 1997
-should count acceptors the way Lipinski 1997 did.
+So each field uses whichever definition agrees, and they do not agree on the
+same one.
 
-**TPSA includes sulphur and phosphorus.** RDKit excludes them by default;
-Ertl's published table includes them, and so does Molport. Agreement goes from
-58.4% to 85.0% with ``includeSandP=True``, and it changes the Veber verdict for
-0.62% of compounds - almost all molecules have no S or P at all, so the two
-definitions agree exactly wherever it cannot matter.
+The primary argument is the paper, not the catalogue: a rule that cites
+Lipinski 1997 should count acceptors the way Lipinski 1997 did, and that paper
+says N+O. Molport agreeing is corroboration, not the reason - see the TPSA note
+below for what happens when a vendor is treated as ground truth.
+
+Nor is this an artefact of one chemotype. The two definitions disagree across
+chemistry generally: on 30,000 diverse PubChem structures they differ for 74%
+of molecules with a median gap of one acceptor. Amide isosteres merely widen
+the gap to two, because RDKit's refined pattern excludes amide nitrogens and
+such a library is made of them.
+
+**TPSA excludes sulphur and phosphorus, which is Ertl's own convention.**
+Molport includes them, and switching to ``includeSandP=True`` raises agreement
+with their catalogue from 58.4% to 85.0% - which is exactly the wrong reason to
+do it. RDKit ships reference values in ``Data/NCI/first_5k.tpsa.csv``, computed
+with Daylight tools and Ertl's own contrib ``tpsa.c``. Over the 1,028 of those
+molecules that contain S or P:
+
+    RDKit default, S and P excluded    100.0% agreement with Ertl's program
+    includeSandP=True                    0.4% agreement
+
+So the canonical implementation excludes them and Molport is the outlier. This
+was briefly changed to chase that vendor's numbers and reverted once the
+reference data was checked. Agreeing with one catalogue is not the same as
+being right.
 
 **Crippen logP is parameterised for organic elements.** It does not raise on a
 metal complex - cisplatin quietly returns 1.70 - so a logP on anything
@@ -117,7 +134,7 @@ def compute_descriptors(mol: Mol) -> dict[str, float | int]:
         "total_atoms": mol.GetNumHeavyAtoms()
         + sum(atom.GetTotalNumHs() for atom in mol.GetAtoms()),
         "clogp": Descriptors.MolLogP(mol),
-        "tpsa": Descriptors.TPSA(mol, includeSandP=True),
+        "tpsa": Descriptors.TPSA(mol),
         "hbd": Descriptors.NumHDonors(mol),
         "hba": Lipinski.NOCount(mol),
         "rotatable_bonds": Descriptors.NumRotatableBonds(mol),
