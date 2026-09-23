@@ -266,7 +266,7 @@ pool is a partial fix — RDKit releases the GIL inside its C++ calls — but th
 Python glue between them does not.
 
 So: a `ProcessPoolExecutor` driven from an async supervisor
-([`jobs/runner.py`](src/sorbent/jobs/runner.py)). The parent stays responsive,
+([`jobs/runner.py`](https://github.com/yboulaamane/sorbent/blob/main/src/sorbent/jobs/runner.py)). The parent stays responsive,
 workers do the chemistry, results come back over a pickle boundary — and that
 boundary is what shapes the next decision.
 
@@ -276,7 +276,7 @@ and CPython changes this default in 3.14.
 
 ### 2. A two-phase pipeline
 
-[`chem/pipeline.py`](src/sorbent/chem/pipeline.py) splits into:
+[`chem/pipeline.py`](https://github.com/yboulaamane/sorbent/blob/main/src/sorbent/chem/pipeline.py) splits into:
 
 - **`process_chunk`** — embarrassingly parallel. Everything depending on one
   molecule only: parse, standardise, descriptors, rules, alerts, scaffold,
@@ -292,7 +292,7 @@ turn subtly non-deterministic under parallelism, which is why
 
 ### 3. Storage behind an interface
 
-[`jobs/store.py`](src/sorbent/jobs/store.py) defines an abstract `JobStore`; the
+[`jobs/store.py`](https://github.com/yboulaamane/sorbent/blob/main/src/sorbent/jobs/store.py) defines an abstract `JobStore`; the
 in-memory implementation is enough to develop against but dies with the process
 and is not shared between uvicorn workers. Write a `RedisJobStore` against the
 same interface and change one line in the lifespan — the routes never learn
@@ -303,20 +303,20 @@ one never awaits, precisely so that swap costs nothing.
 
 ## The science layer
 
-Nine modules under [`src/sorbent/chem/`](src/sorbent/chem/), each documenting the
+Nine modules under [`src/sorbent/chem/`](https://github.com/yboulaamane/sorbent/tree/main/src/sorbent/chem), each documenting the
 algorithm, the RDKit calls and the traps found while building it:
 
 | Module | What it does |
 |---|---|
-| [`parse.py`](src/sorbent/chem/parse.py) | SMILES → sanitised, standardised molecule + InChIKey |
-| [`descriptors.py`](src/sorbent/chem/descriptors.py) | MW, clogP, TPSA, HBD/HBA, rotatable bonds, Fsp3, stereo |
-| [`rules.py`](src/sorbent/chem/rules.py) | Lipinski, Veber, Egan, Ghose, lead-like, Ro3 |
-| [`alerts.py`](src/sorbent/chem/alerts.py) | PAINS / BRENK / NIH / ZINC via RDKit `FilterCatalog` |
-| [`scaffolds.py`](src/sorbent/chem/scaffolds.py) | Bemis–Murcko, plain and generic |
-| [`fingerprints.py`](src/sorbent/chem/fingerprints.py) | ECFP4 and Tanimoto similarity |
-| [`cluster.py`](src/sorbent/chem/cluster.py) | Butina clustering, capped and refusing clearly above it |
-| [`score.py`](src/sorbent/chem/score.py) | Composite score and its per-component breakdown |
-| [`pipeline.py`](src/sorbent/chem/pipeline.py) | Composes the rest across the two phases |
+| [`parse.py`](https://github.com/yboulaamane/sorbent/blob/main/src/sorbent/chem/parse.py) | SMILES → sanitised, standardised molecule + InChIKey |
+| [`descriptors.py`](https://github.com/yboulaamane/sorbent/blob/main/src/sorbent/chem/descriptors.py) | MW, clogP, TPSA, HBD/HBA, rotatable bonds, Fsp3, stereo |
+| [`rules.py`](https://github.com/yboulaamane/sorbent/blob/main/src/sorbent/chem/rules.py) | Lipinski, Veber, Egan, Ghose, lead-like, Ro3 |
+| [`alerts.py`](https://github.com/yboulaamane/sorbent/blob/main/src/sorbent/chem/alerts.py) | PAINS / BRENK / NIH / ZINC via RDKit `FilterCatalog` |
+| [`scaffolds.py`](https://github.com/yboulaamane/sorbent/blob/main/src/sorbent/chem/scaffolds.py) | Bemis–Murcko, plain and generic |
+| [`fingerprints.py`](https://github.com/yboulaamane/sorbent/blob/main/src/sorbent/chem/fingerprints.py) | ECFP4 and Tanimoto similarity |
+| [`cluster.py`](https://github.com/yboulaamane/sorbent/blob/main/src/sorbent/chem/cluster.py) | Butina clustering, capped and refusing clearly above it |
+| [`score.py`](https://github.com/yboulaamane/sorbent/blob/main/src/sorbent/chem/score.py) | Composite score and its per-component breakdown |
+| [`pipeline.py`](https://github.com/yboulaamane/sorbent/blob/main/src/sorbent/chem/pipeline.py) | Composes the rest across the two phases |
 
 ```bash
 make test-chem                             # the science layer
@@ -572,8 +572,8 @@ which `finalize` applies as a hard filter:
 ## Server settings
 
 These configure the service process rather than a single run. Everything
-is `SORBENT_`-prefixed; see [`.env.example`](.env.example) and
-[`config.py`](src/sorbent/config.py).
+is `SORBENT_`-prefixed; see [`.env.example`](https://github.com/yboulaamane/sorbent/blob/main/.env.example) and
+[`config.py`](https://github.com/yboulaamane/sorbent/blob/main/src/sorbent/config.py).
 
 | Variable | Default | |
 |---|---|---|
