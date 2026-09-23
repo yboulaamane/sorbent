@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -e .
 
 COPY src/ src/
 
-# The pool forks children; running as root is unnecessary.
+# The pool spawns worker processes; none of them need root.
 RUN useradd --create-home --uid 10001 sorbent && chown -R sorbent /app
 USER sorbent
 

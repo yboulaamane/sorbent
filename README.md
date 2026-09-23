@@ -79,22 +79,155 @@ ranking — see [how the score works](#how-the-score-works-and-its-sharp-edge).
 
 ---
 
-## Quickstart
+## Using it
+
+### Install
+
+Requires Python 3.12 or newer.
 
 ```bash
-make install
-make run          # http://localhost:8000/docs
+git clone https://github.com/yboulaamane/sorbent.git
+cd sorbent
+python3 -m venv .venv
+.venv/bin/pip install -e .
 ```
 
-```bash
-curl -X POST localhost:8000/v1/jobs \
-  -H 'content-type: application/json' \
-  -d '{"name":"vendor-plate-1","smiles":["CC(=O)Oc1ccccc1C(=O)O","Cn1cnc2c1c(=O)n(C)c(=O)n2C"]}'
-```
+`make install` does the same and adds the development tools.
+
+### Start the service
 
 ```bash
-curl -F 'file=@library.smi' -F 'name=molport-subset' localhost:8000/v1/jobs/upload
+.venv/bin/sorbent          # listening on http://localhost:8000
 ```
+
+Interactive API documentation, where every endpoint can be tried from the
+browser, is at **http://localhost:8000/docs**.
+
+### Triage a library: submit, wait, fetch
+
+Jobs are asynchronous. Submitting returns a job ID immediately and the work
+runs in the background, so every run is three steps:
+
+```bash
+# 1. Submit a file. You get a job ID back straight away.
+JOB=$(curl -s -F 'file=@library.smi' localhost:8000/v1/jobs/upload \
+      | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+
+# 2. Wait. Exits when the job has finished, whether it succeeded or failed.
+while curl -s localhost:8000/v1/jobs/$JOB | grep -qE '"status":"(pending|running)"'; do sleep 2; done
+curl -s localhost:8000/v1/jobs/$JOB | python3 -m json.tool     # status, counts, any error
+
+# 3. Fetch the results.
+curl -s localhost:8000/v1/jobs/$JOB/results | python3 -m json.tool          # first 100, ranked
+curl -s localhost:8000/v1/jobs/$JOB/results.ndjson -o results.ndjson       # all of them
+```
+
+Results come back ranked by score, best first. Records that were excluded
+follow the shortlist and carry the reason — a `parse_error`, a `duplicate_of`
+pointing at the record they duplicate, or a score of `null` for something a
+filter removed. See [what the report contains](#what-the-report-contains).
+
+For large result sets page with `?offset=100&limit=100` until `next_offset` is
+`null`, or take the `.ndjson` stream, which holds one molecule per line.
+
+### Input formats
+
+**`.smi`** — one molecule per line, the SMILES then an identifier, separated by
+whitespace. Blank lines and lines starting with `#` are skipped.
+
+```
+CC(=O)Oc1ccccc1C(=O)O   aspirin
+CC(C)Cc1ccc(cc1)C(C)C(=O)O   ibuprofen
+```
+
+**`.csv`** — say which columns hold the SMILES and the identifier:
+
+```bash
+curl -s -F 'file=@library.csv' -F 'smiles_column=smiles' -F 'id_column=id' \
+     localhost:8000/v1/jobs/upload
+```
+
+**Inline JSON**, for a handful of molecules:
+
+```bash
+curl -s -X POST localhost:8000/v1/jobs -H 'content-type: application/json' \
+  -d '{"smiles": ["CC(=O)Oc1ccccc1C(=O)O", "Oc1ccccc1O"], "identifiers": ["aspirin", "catechol"]}'
+```
+
+Up to 250,000 molecules per job and 64 MB per upload by default; see
+[server settings](#server-settings) to raise either.
+
+### Configuring a run
+
+Send a `config_json` field with an upload, or a `config` object in the inline
+body. Every field is optional. A typical run on a large library:
+
+```bash
+curl -s -F 'file=@library.smi' \
+     -F 'config_json={"cluster": false, "top_n": 500, "descriptor_windows": {"molecular_weight": {"minimum": 150}}}' \
+     localhost:8000/v1/jobs/upload
+```
+
+| Field | Default | What it does |
+|---|---|---|
+| `cluster` | `true` | Butina clustering. **Set `false` above 20,000 molecules** — above that the job is refused rather than left to run out of memory. |
+| `top_n` | none | Keep only the N best-scoring molecules. |
+| `representatives_only` | `false` | One molecule per cluster, the best scorer. Needs `cluster: true`. |
+| `descriptor_windows` | none | Hard filters on any descriptor, e.g. `{"molecular_weight": {"minimum": 150, "maximum": 500}}`. |
+| `rule_sets` | `["veber"]` | Any of `lipinski`, `veber`, `egan`, `ghose`, `lead_like`, `fragment`. Reported on every molecule. |
+| `alert_catalogs` | `["pains", "brenk"]` | Any of `pains`, `pains_a`, `pains_b`, `pains_c`, `brenk`, `nih`, `zinc`. |
+| `drop_rule_failures` | `false` | Remove molecules that fail a rule set, rather than only reporting it. |
+| `drop_alert_hits` | `false` | Remove molecules with any structural alert, rather than only flagging it. |
+| `deduplicate` | `true` | Collapse records with the same standardised structure. |
+| `score_weights` | see below | How the composite score weighs its components — see [how the score works](#how-the-score-works-and-its-sharp-edge). |
+
+The full schema, with every field, is at `/docs`.
+
+### Without the server
+
+The science layer is plain Python and needs no service running. For a
+one-off analysis in a notebook or script this is the quickest route:
+
+```python
+from sorbent.chem.pipeline import process_chunk, finalize
+from sorbent.schemas.filters import TriageConfig
+
+records = [
+    ("aspirin", "CC(=O)Oc1ccccc1C(=O)O"),
+    ("aspirin-Na", "CC(=O)Oc1ccccc1C(=O)[O-].[Na+]"),
+    ("catechol", "Oc1ccccc1O"),
+]
+config = TriageConfig(cluster=False)
+
+molecules, counts = finalize(process_chunk(records, config.model_dump(mode="json")), config)
+```
+
+`aspirin-Na` comes back with `duplicate_of="aspirin"`, and catechol with PAINS
+and BRENK alerts. For a large library, split the records into chunks, map
+`process_chunk` across a `concurrent.futures.ProcessPoolExecutor`, and call
+`finalize` once on everything that comes back — which is what the service does
+internally.
+
+The individual steps are importable too:
+
+```python
+from sorbent.chem.parse import process_record
+from sorbent.chem.descriptors import compute_descriptors
+
+record = process_record("CC(=O)Oc1ccccc1C(=O)[O-].[Na+]")
+record.standard_smiles  # 'CC(=O)Oc1ccccc1C(=O)O' - salt stripped, neutralised
+compute_descriptors(record.mol)  # molecular_weight, clogp, tpsa, hba, hbd, ...
+```
+
+### With Docker
+
+```bash
+docker build -t sorbent .
+docker run -p 8000:8000 sorbent
+```
+
+Run a single container. Jobs live in memory, so a second replica would not
+know about jobs submitted to the first.
 
 ---
 
@@ -436,9 +569,10 @@ which `finalize` applies as a hard filter:
 6 water           —      —  filtered
 ```
 
-## Config
+## Server settings
 
-Everything is `SORBENT_`-prefixed; see [`.env.example`](.env.example) and
+These configure the service process rather than a single run. Everything
+is `SORBENT_`-prefixed; see [`.env.example`](.env.example) and
 [`config.py`](src/sorbent/config.py).
 
 | Variable | Default | |
