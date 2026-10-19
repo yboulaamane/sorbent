@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sorbent"
-version = "0.1.0"
+version = "0.1.1"
 description = "A compound triage service: submit a SMILES library, get back a ranked, deduplicated, liability-flagged shortlist."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -14,7 +14,7 @@ keywords = [
     "cheminformatics", "drug-discovery", "rdkit", "compound-triage",
     "virtual-screening", "admet", "pains", "clustering", "fastapi",
 ]
-authors = [{ name = "Yassir Boulaamane", email = "yassirxmail@gmail.com" }]
+authors = [{ name = "Yassir Boulaamane" }]
 
 dependencies = [
     "fastapi>=0.115",
